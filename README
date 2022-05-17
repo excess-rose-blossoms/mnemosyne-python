@@ -1,1 +1,24 @@
 Insert README here
+
+
+Helpful SVS Code:
+
+
+import asyncio as aio
+import logging
+import sys
+from argparse import ArgumentParser, SUPPRESS
+from typing import List, Optional
+# NDN Imports
+from ndn.app import NDNApp
+from ndn.encoding import Name
+# Custom Imports
+sys.path.insert(0,'.')
+from ndn.svs import SVSync, SVSyncLogger, MissingData
+
+app = NDNApp()
+
+def foo():
+    return 0
+
+svs = SVSync(app, Name.from_str("/mnemosyne"), Name.from_str("1"), foo)
