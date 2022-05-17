@@ -6,15 +6,9 @@ from ndn.encoding.name import Name
 class Logger(NDNApp):
     def __init__(self, logger_ID):
         NDNApp.__init__(face=None, keychain=None)
-<<<<<<< HEAD
         self.logger_ID = logger_ID # TODO
         self.record_list = []
         self.tails_list = []
-=======
-        self.logger_ID = logger_ID # TODO: Find a sensible way of assigning a logger ID
-        self.record_dag = record_dag # TODO: remove this later -- DAG should be obtained from NDN SVS Sync
-        self.record_list = []
->>>>>>> f284a13984e0ad1415ae3b762fb77549aae11c8b
         return
     
     # TODO
@@ -30,7 +24,6 @@ class Logger(NDNApp):
         self.tails_list.append(new_record)
         # svs.publish(tails_list)
 
-<<<<<<< HEAD
     def create_record(self, log_event, prior_node_1, prior_node_2):
         record_name = Name.from_str(self.logger_ID + "/" + "RECORD" + "/" + log_event) # TODO
         prior_digest_1 = hash(prior_node_1)
@@ -41,7 +34,6 @@ class Logger(NDNApp):
                 }
         self.prepare_data(record_name, content=payload, signer=None) #TODO: signing
         return {"rec_name": record_name, "rec_payload": payload}
-=======
     def create_record(self, log_event):
         # SVS event
         record_name = Name.from_str(self.logger_ID + "/" + "RECORD" + log_event) # TODO: replace log_event.id with an actual identifier from the log event received
@@ -65,4 +57,3 @@ class Logger(NDNApp):
         self.record_list.insert(len(self.record_list), record_event)
 
 
->>>>>>> f284a13984e0ad1415ae3b762fb77549aae11c8b
