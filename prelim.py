@@ -1,3 +1,4 @@
+from numpy import record
 from ndn.app import NDNApp
 from ndn.encoding.name import Name
 
@@ -7,6 +8,7 @@ class Logger(NDNApp):
         NDNApp.__init__(face=None, keychain=None)
         self.logger_ID = logger_ID # TODO: Find a sensible way of assigning a logger ID
         self.record_dag = record_dag # TODO: remove this later -- DAG should be obtained from NDN SVS Sync
+        self.record_list = []
         return
     
     def receive_event(self, log_event):
@@ -27,3 +29,18 @@ class Logger(NDNApp):
         payload = {"log_event": log_event, "prior_digest_1": None, "prior_digest_2": None}
         # TODO: have the logger sign the record properly
         self.prepare_data(record_name, content=payload, signer=None)
+
+
+    def insert_record(self, record_event):
+        if len(self.record_list) == 0:
+            record_event["payload"]["prior_digest_1"] = record_event
+            record_event["payload"]["prior_digest_2"] = record_event
+        elif len(self.record_list) == 1:
+            record_event["payload"]["prior_digest_1"] = self.record_list[-1]
+            record_event["payload"]["prior_digest_2"] = self.record_list[-1]
+        else:
+            record_event["payload"]["prior_digest_1"] = self.record_list[-1]
+            record_event["payload"]["prior_digest_2"] = self.record_list[-2]
+        self.record_list.insert(len(self.record_list), record_event)
+
+
