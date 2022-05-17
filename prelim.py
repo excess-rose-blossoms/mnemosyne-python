@@ -8,6 +8,16 @@ class Logger(NDNApp):
         self.logger_ID = logger_ID # TODO: Find a sensible way of assigning a logger ID
         self.record_dag = record_dag # TODO: remove this later -- DAG should be obtained from NDN SVS Sync
         return
+    
+    def receive_event(self, log_event):
+        # TODO: set random timer
+        # Case: Timer goes off
+            #Authenticate event
+            self.create_record(log_event)
+            #Poll SVS??
+            #Publish record to SVS
+            #Insert record into DAG
+        
 
     def create_record(self, log_event):
         # SVS event
