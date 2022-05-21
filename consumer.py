@@ -35,10 +35,16 @@ class Program:
         self.group_prefix = "/svs/log_events"
         self.svs:SVSync = SVSync(app, Name.from_str(self.group_prefix), Name.from_str(self.args["node_id"]), self.missing_callback)
         self.records_list = []
+        self.tails_list = []
         print(f'CONSUMER STARTED! | GROUP PREFIX: {self.group_prefix} | NODE ID: {self.args["node_id"]} |')
     
     async def run(self) -> None:
         return
+
+    # Given a log event, create and return an NDN record packet.
+    # TODO: Actually convert the stuff to packets
+    def create_record(self, log_event, record_1, record_2):
+        return {"log":log_event, "r1": record_1, "r2": record_2}
     
     def missing_callback(self, missing_list:List[MissingData]) -> None:
         aio.ensure_future(self.on_missing_data(missing_list))
@@ -48,8 +54,16 @@ class Program:
             while i.lowSeqno <= i.highSeqno:
                 content_str:Optional[bytes] = await self.svs.fetchData(Name.from_str(i.nid), i.lowSeqno, 2)
                 if content_str:
-                    self.records_list.append(content_str.decode())
-                    print(self.records_list)
+                    record_1 = self.tails_list.pop()["log"] if (len(self.tails_list) > 0) else None
+                    record_2 = self.tails_list.pop()["log"] if (len(self.tails_list) > 0) else None
+                    new_record = self.create_record(content_str.decode(), record_1, record_2)
+                    self.records_list.append(new_record)
+                    self.tails_list.append(new_record)
+                    print("------------")
+                    print("added log event " + content_str.decode())
+                    print("record_list: " + str(self.records_list))
+                    print("tails_list: " + str(self.tails_list))
+                    print("------------")
                 i.lowSeqno = i.lowSeqno + 1
 
 async def start(args:dict) -> None:
