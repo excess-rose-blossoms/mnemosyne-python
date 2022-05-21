@@ -1,1 +1,49 @@
-Insert README here
+CASE 1: 1 PRODUCER, 1 CONSUMER
+--------
+PRODUCER
+--------
+- Every 1 second, the producer generates a new log event and publishes it to the group "/svs/log_events".
+- Each log event consists only of an integer of increasing value, which is incremented after each log event.
+
+Example output:
+
+PRODUCER STARTED! | GROUP PREFIX: /svs/log_events | NODE ID: producer_1
+produced log event: 1
+produced log event: 2
+produced log event: 3
+produced log event: 4
+...
+
+--------
+CONSUMER
+--------
+- The consumer maintains two different lists:
+	- records_list: The full list of records.
+	- tails_list: Records not yet referred to.
+- The consumer receives each log event, encapsulates it in a record, and stores said record in records_list and tails_list.
+- Each record includes digests for two prior records. These are taken out from tails_list.
+
+Example output (For now, each record is represented in the format {log:<log event>, r1: <prior record 1>, r2: <prior record 2>}:
+
+CONSUMER STARTED! | GROUP PREFIX: /svs/log_events | NODE ID: <from input>
+
+------------------
+added log event 1 to records
+records_list:[{log:1, r1: None, r2: None}]
+tails_list: [{log:1, r1: None, r2: None}]
+------------------
+------------------
+added log event 2
+records_list:[{log:1, r1: None, r2: None}, {log:2, r1: 1, r2: None}]
+tails_list: [{log:2, r1: 1, r2: None}]
+------------------
+------------------
+added log event 3
+records_list:[{log:1, r1: None, r2: None}, {log:2, r1: 1, r2: None}, {log: 3, r1: 2, r2: None}]
+tails_list: [{log: 3, r1: 2, r2: None}]
+...
+
+todo:
+- store the log events as NDN packets
+- set up a second sync group for loggers to handle the 1 producer 2 consumer case
+- implement random backoff
