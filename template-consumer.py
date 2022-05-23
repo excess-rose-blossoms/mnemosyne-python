@@ -69,9 +69,9 @@ class Consumer:
     # Returns an object with information about changes in records
     def store_record(self, content_str):
         # Create and store record
-        record_1 = self.tails_list.pop()["log"] if (len(self.tails_list) > 0) else None
-        record_2 = self.tails_list.pop()["log"] if (len(self.tails_list) > 0) else None
-        new_record = self.create_record(content_str.decode(), record_1, record_2)
+        record_1 = self.tails_list.pop() if (len(self.tails_list) > 0) else None
+        record_2 = self.tails_list.pop() if (len(self.tails_list) > 0) else None
+        new_record = self.create_record(content_str.decode(), (record_1["log"] if record_1 else None), (record_2["log"] if record_2 else None))
         self.records_list.append(new_record)
         self.tails_list.append(new_record)
         # Note and return actions taken
@@ -95,10 +95,12 @@ class Consumer:
         if split_change[0] == "ADD-REC":
             self.records_list.append(ast.literal_eval(split_change[1]))
         elif split_change[0] == "ADD-TAIL":
-            return
-            #self.tails_list.append(dict(split_change[1]))
+            self.tails_list.append(ast.literal_eval(split_change[1]))
         elif split_change[0] == "DEL-TAIL":
-            return
+            try:
+                self.tails_list.remove(ast.literal_eval(split_change[1]))
+            except ValueError:
+                pass
         return
 
     def log_events_missing_callback(self, missing_list:List[MissingData]) -> None:
@@ -121,9 +123,13 @@ class Consumer:
                 content_str:Optional[bytes] = await self.svs_records.fetchData(Name.from_str(i.nid), i.lowSeqno, 2)
                 if content_str:
                     print("--------------")
-                    print("BEFORE RECORD UPDATE: " + str(self.records_list))
+                    print("-BEFORE RECORD UPDATE-")
+                    print("RECORDS: " + str(self.records_list))
+                    print("TAILS: " + str(self.tails_list))
                     self.update_records(content_str.decode())
-                    print("AFTER RECORD UPDATE: " + str(self.records_list))
+                    print("-AFTER RECORD UPDATE-")
+                    print("RECORDS: " + str(self.records_list))
+                    print("TAILS: " + str(self.tails_list))
                     print("--------------")
                 i.lowSeqno = i.lowSeqno + 1
 
