@@ -2,6 +2,7 @@ import asyncio as aio
 import logging
 import sys
 import time
+import ast
 from argparse import ArgumentParser, SUPPRESS
 from typing import List, Optional
 # NDN Imports
@@ -30,15 +31,17 @@ def parse_cmd_args() -> dict:
     args["verbose"] = argvars.verbose
     return args
 
-class Program:
+class Consumer:
     def __init__(self, args:dict) -> None:
         self.args = args
-        self.log_events_group_prefix = "/svs/mnemosyne/log_events"
-        self.records_group_prefix = "/svs/mnemosyne/records"
-        self.svs_log_events:SVSync = SVSync(app, Name.from_str(self.log_events_group_prefix), Name.from_str(self.args["node_id"]), self.log_events_missing_callback)
-        self.svs_records:SVSync = SVSync(app, Name.from_str(self.records_group_prefix), Name.from_str(self.args["node_id"]), self.records_missing_callback)
         self.records_list = []
         self.tails_list = []
+        # log_events group related (communication between producer and loggers)
+        self.log_events_group_prefix = "/svs/mnemosyne/log_events"
+        self.svs_log_events:SVSync = SVSync(app, Name.from_str(self.log_events_group_prefix), Name.from_str(self.args["node_id"]), self.log_events_missing_callback)
+        # records_group related (communication between loggers)
+        self.records_group_prefix = "/svs/mnemosyne/records"
+        self.svs_records:SVSync = SVSync(app, Name.from_str(self.records_group_prefix), Name.from_str(self.args["node_id"]), self.records_missing_callback)
         print(f'CONSUMER STARTED! | LOG GROUP PREFIX: {self.log_events_group_prefix} | RECORDS GROUP PREFIX {self.records_group_prefix} | NODE ID: {self.args["node_id"]} |')
     
     # TODO: remove this later -- this is a tempoorary measure to let consumers simulate receiving events from a non-existent producer
@@ -46,8 +49,12 @@ class Program:
         counter = 1
         while True:
             try:
-                record_changes = self.store_record(str(counter).encode())
-                self.publish_record_changes(record_changes)
+                if (self.args["node_id"] == "/even" and counter % 2 == 0):
+                    record_changes = self.store_record(str(counter).encode())
+                    self.publish_record_changes(record_changes)
+                elif (self.args["node_id"] == "/odd" and counter % 2 != 0):
+                    record_changes = self.store_record(str(counter).encode())
+                    self.publish_record_changes(record_changes)
                 counter += 1
             except KeyboardInterrupt:
                 sys.exit()
@@ -69,26 +76,30 @@ class Program:
         self.tails_list.append(new_record)
         # Note and return actions taken
         record_changes = []
-        record_changes.append("ADD-REC" + str(new_record))
-        record_changes.append("ADD-TAIL" + str(new_record))
+        record_changes.append("ADD-REC" + " | " + str(new_record))
+        record_changes.append("ADD-TAIL" + " | " + str(new_record))
         if (record_1):
-            record_changes.append("DEL-TAIL" + str(record_1))
+            record_changes.append("DEL-TAIL" + " | " + str(record_1))
         if (record_2):
-            record_changes.append("DEL-TAIL" + str(record_2))
+            record_changes.append("DEL-TAIL" + " | " + str(record_2))
         return record_changes
-        # print("------------")
-        # print("added log event " + content_str.decode())
-        # print("record_list: " + str(self.records_list))
-        # print("tails_list: " + str(self.tails_list))
-        # print("------------")
 
     def publish_record_changes(self, record_changes):
-        self.svs_records.publishData(str(record_changes).encode())
-        print("I PUBLISHED: " + str(record_changes))
+        for change in record_changes:
+            self.svs_records.publishData(str(change).encode())
 
     # Parse an input list of record changes and make changes to the records accordingly
-    def update_records(self, record_changes):
-        pass
+    def update_records(self, record_changes_str):
+        split_change = record_changes_str.split(' | ')
+        print(split_change)
+        if split_change[0] == "ADD-REC":
+            self.records_list.append(ast.literal_eval(split_change[1]))
+        elif split_change[0] == "ADD-TAIL":
+            return
+            #self.tails_list.append(dict(split_change[1]))
+        elif split_change[0] == "DEL-TAIL":
+            return
+        return
 
     def log_events_missing_callback(self, missing_list:List[MissingData]) -> None:
         aio.ensure_future(self.log_events_on_missing_data(missing_list))
@@ -109,12 +120,16 @@ class Program:
             while i.lowSeqno <= i.highSeqno:
                 content_str:Optional[bytes] = await self.svs_records.fetchData(Name.from_str(i.nid), i.lowSeqno, 2)
                 if content_str:
-                    print(i.nid +" SENT: "+ content_str.decode())
+                    print("--------------")
+                    print("BEFORE RECORD UPDATE: " + str(self.records_list))
+                    self.update_records(content_str.decode())
+                    print("AFTER RECORD UPDATE: " + str(self.records_list))
+                    print("--------------")
                 i.lowSeqno = i.lowSeqno + 1
 
 async def start(args:dict) -> None:
-    prog = Program(args)
-    await prog.run()
+    cons = Consumer(args)
+    await cons.run()
 
 def main() -> int:
     args = parse_cmd_args()
