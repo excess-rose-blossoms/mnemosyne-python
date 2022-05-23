@@ -32,11 +32,13 @@ def parse_cmd_args() -> dict:
 class Program:
     def __init__(self, args:dict) -> None:
         self.args = args
-        self.group_prefix = "/svs/log_events"
-        self.svs:SVSync = SVSync(app, Name.from_str(self.group_prefix), Name.from_str(self.args["node_id"]), self.missing_callback)
+        self.log_events_group_prefix = "/svs/mnemosyne/log_events"
+        self.records_group_prefix = "/svs/mnemosyne/records"
+        self.svs_log_events:SVSync = SVSync(app, Name.from_str(self.log_events_group_prefix), Name.from_str(self.args["node_id"]), self.log_events_missing_callback)
+        self.svs_records:SVSync = SVSync(app, Name.from_str(self.records_group_prefix), Name.from_str(self.args["node_id"]), self.records_missing_callback)
         self.records_list = []
         self.tails_list = []
-        print(f'CONSUMER STARTED! | GROUP PREFIX: {self.group_prefix} | NODE ID: {self.args["node_id"]} |')
+        print(f'CONSUMER STARTED! | LOG GROUP PREFIX: {self.log_events_group_prefix} | RECORDS GROUP PREFIX {self.records_group_prefix} | NODE ID: {self.args["node_id"]} |')
     
     async def run(self) -> None:
         return
@@ -59,16 +61,22 @@ class Program:
         print("tails_list: " + str(self.tails_list))
         print("------------")
 
-    def missing_callback(self, missing_list:List[MissingData]) -> None:
-        aio.ensure_future(self.on_missing_data(missing_list))
+    def log_events_missing_callback(self, missing_list:List[MissingData]) -> None:
+        aio.ensure_future(self.log_events_on_missing_data(missing_list))
 
-    async def on_missing_data(self, missing_list:List[MissingData]) -> None:
+    async def log_events_on_missing_data(self, missing_list:List[MissingData]) -> None:
         for i in missing_list:
             while i.lowSeqno <= i.highSeqno:
-                content_str:Optional[bytes] = await self.svs.fetchData(Name.from_str(i.nid), i.lowSeqno, 2)
+                content_str:Optional[bytes] = await self.svs_log_events.fetchData(Name.from_str(i.nid), i.lowSeqno, 2)
                 if content_str:
                     self.store_record(content_str)
                 i.lowSeqno = i.lowSeqno + 1
+
+    def records_missing_callback(self, missing_list:List[MissingData]) -> None:
+        aio.ensure_future(self.records_on_missing_data(missing_list))
+
+    async def records_on_missing_data(self, missing_list:List[MissingData]) -> None:
+        pass
 
 async def start(args:dict) -> None:
     prog = Program(args)
