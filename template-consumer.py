@@ -1,6 +1,7 @@
 import asyncio as aio
 import logging
 import sys
+import time
 from argparse import ArgumentParser, SUPPRESS
 from typing import List, Optional
 # NDN Imports
@@ -40,8 +41,13 @@ class Program:
         self.tails_list = []
         print(f'CONSUMER STARTED! | LOG GROUP PREFIX: {self.log_events_group_prefix} | RECORDS GROUP PREFIX {self.records_group_prefix} | NODE ID: {self.args["node_id"]} |')
     
+    # TODO: remove this later -- this is a tempoorary measure to let consumers simulate receiving events from a non-existent producer
     async def run(self) -> None:
-        return
+        counter = 1
+        while True:
+            self.store_record(str(counter).encode())
+            counter += 1
+            time.sleep(1)
 
     # Given a log event, create and return an NDN record packet.
     # TODO: This is a temporary implementation. Should actually convert the stuff to packets
