@@ -45,9 +45,13 @@ class Program:
     async def run(self) -> None:
         counter = 1
         while True:
-            self.store_record(str(counter).encode())
-            counter += 1
-            time.sleep(1)
+            try:
+                record_changes = self.store_record(str(counter).encode())
+                self.publish_record_changes(record_changes)
+                counter += 1
+            except KeyboardInterrupt:
+                sys.exit()
+            await aio.sleep(1)
 
     # Given a log event, create and return an NDN record packet.
     # TODO: This is a temporary implementation. Should actually convert the stuff to packets
@@ -55,17 +59,32 @@ class Program:
         return {"log":log_event, "r1": record_1, "r2": record_2}
     
     # Takes care of the behavior of storing the relevant record to the tails and records lists.
+    # Returns an object with information about changes in records
     def store_record(self, content_str):
+        # Create and store record
         record_1 = self.tails_list.pop()["log"] if (len(self.tails_list) > 0) else None
         record_2 = self.tails_list.pop()["log"] if (len(self.tails_list) > 0) else None
         new_record = self.create_record(content_str.decode(), record_1, record_2)
         self.records_list.append(new_record)
         self.tails_list.append(new_record)
-        print("------------")
-        print("added log event " + content_str.decode())
-        print("record_list: " + str(self.records_list))
-        print("tails_list: " + str(self.tails_list))
-        print("------------")
+        # Note and return actions taken
+        record_changes = []
+        record_changes.append("ADD-REC" + str(new_record))
+        record_changes.append("ADD-TAIL" + str(new_record))
+        if (record_1):
+            record_changes.append("DEL-TAIL" + str(record_1))
+        if (record_2):
+            record_changes.append("DEL-TAIL" + str(record_2))
+        return record_changes
+        # print("------------")
+        # print("added log event " + content_str.decode())
+        # print("record_list: " + str(self.records_list))
+        # print("tails_list: " + str(self.tails_list))
+        # print("------------")
+
+    def publish_record_changes(self, record_changes):
+        for change in record_changes:
+            print(change)
 
     def log_events_missing_callback(self, missing_list:List[MissingData]) -> None:
         aio.ensure_future(self.log_events_on_missing_data(missing_list))

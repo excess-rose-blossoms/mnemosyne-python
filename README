@@ -33,9 +33,9 @@ store_record(log_content):
 ```
 
 Updates are sent to the /svs/mnemosyne/records_group in the following format:
-<ADD-REC/ADD-TAIL/DEL-TAIL> RECORD-NUM
-ADD-REC: added record of number RECORD-NUM to the records list
-ADD-TAIL: added record of number RECORD-NUM to the tails list
+<ADD-REC/ADD-TAIL/DEL-TAIL> <RECORD/RECORD-NUM>
+ADD-REC: added RECORD to the records list
+ADD-TAIL: added RECORD to the tails list
 DEL-TAIL: popped off record of number RECORD-NUM from the tails list
 
 Upon receiving updates from the records group, the logger adds or removes the relevant record from the relevant list. Adding is trivial since you just need to append it, but deletion requires examining each record in linear order to see if it is a match for RECORD-NUM since there is no guarantee each logger has the same tails list. This is a clear candidate for optimization should we have the time, perhaps using some more efficient search algorithm or by passing more information such as an index or even the full tails list to aid in the search and deletion.
