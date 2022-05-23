@@ -42,28 +42,33 @@ class Program:
         return
 
     # Given a log event, create and return an NDN record packet.
-    # TODO: Actually convert the stuff to packets
+    # TODO: This is a temporary implementation. Should actually convert the stuff to packets
     def create_record(self, log_event, record_1, record_2):
         return {"log":log_event, "r1": record_1, "r2": record_2}
     
+    # Takes care of the behavior of storing the relevant record to the tails and records lists.
+    def store_record(self, content_str):
+        record_1 = self.tails_list.pop()["log"] if (len(self.tails_list) > 0) else None
+        record_2 = self.tails_list.pop()["log"] if (len(self.tails_list) > 0) else None
+        new_record = self.create_record(content_str.decode(), record_1, record_2)
+        self.records_list.append(new_record)
+        self.tails_list.append(new_record)
+        print("------------")
+        print("added log event " + content_str.decode())
+        print("record_list: " + str(self.records_list))
+        print("tails_list: " + str(self.tails_list))
+        print("------------")
+
     def missing_callback(self, missing_list:List[MissingData]) -> None:
         aio.ensure_future(self.on_missing_data(missing_list))
-    
+
     async def on_missing_data(self, missing_list:List[MissingData]) -> None:
         for i in missing_list:
             while i.lowSeqno <= i.highSeqno:
                 content_str:Optional[bytes] = await self.svs.fetchData(Name.from_str(i.nid), i.lowSeqno, 2)
                 if content_str:
-                    record_1 = self.tails_list.pop()["log"] if (len(self.tails_list) > 0) else None
-                    record_2 = self.tails_list.pop()["log"] if (len(self.tails_list) > 0) else None
-                    new_record = self.create_record(content_str.decode(), record_1, record_2)
-                    self.records_list.append(new_record)
-                    self.tails_list.append(new_record)
-                    print("------------")
-                    print("added log event " + content_str.decode())
-                    print("record_list: " + str(self.records_list))
-                    print("tails_list: " + str(self.tails_list))
-                    print("------------")
+                    if (content_str and (int(content_str.decode()) % 2 != 0)):
+                        self.store_record(content_str)
                 i.lowSeqno = i.lowSeqno + 1
 
 async def start(args:dict) -> None:

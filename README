@@ -40,6 +40,8 @@ DEL-TAIL: popped off record of number RECORD-NUM from the tails list
 
 Upon receiving updates from the records group, the logger adds or removes the relevant record from the relevant list. Adding is trivial since you just need to append it, but deletion requires examining each record in linear order to see if it is a match for RECORD-NUM since there is no guarantee each logger has the same tails list. This is a clear candidate for optimization should we have the time, perhaps using some more efficient search algorithm or by passing more information such as an index or even the full tails list to aid in the search and deletion.
 
+NOTE: In order to work on the record group algorithm before we are done with the implementation for the log event group algorithm, we allow our consumers to generate their own events, simulating receiving events from the producer node without actually having to run a producer node (as running more than 2 nodes causes problems at this stage in development).
+
 -------------
 EVEN-CONSUMER
 -------------
