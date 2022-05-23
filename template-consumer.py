@@ -83,8 +83,12 @@ class Program:
         # print("------------")
 
     def publish_record_changes(self, record_changes):
-        for change in record_changes:
-            print(change)
+        self.svs_records.publishData(str(record_changes).encode())
+        print("I PUBLISHED: " + str(record_changes))
+
+    # Parse an input list of record changes and make changes to the records accordingly
+    def update_records(self, record_changes):
+        pass
 
     def log_events_missing_callback(self, missing_list:List[MissingData]) -> None:
         aio.ensure_future(self.log_events_on_missing_data(missing_list))
@@ -101,7 +105,12 @@ class Program:
         aio.ensure_future(self.records_on_missing_data(missing_list))
 
     async def records_on_missing_data(self, missing_list:List[MissingData]) -> None:
-        pass
+        for i in missing_list:
+            while i.lowSeqno <= i.highSeqno:
+                content_str:Optional[bytes] = await self.svs_records.fetchData(Name.from_str(i.nid), i.lowSeqno, 2)
+                if content_str:
+                    print(i.nid +" SENT: "+ content_str.decode())
+                i.lowSeqno = i.lowSeqno + 1
 
 async def start(args:dict) -> None:
     prog = Program(args)
