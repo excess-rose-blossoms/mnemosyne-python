@@ -10,7 +10,7 @@ from ndn.app import NDNApp
 from ndn.encoding import Name
 # Custom Imports
 sys.path.insert(0,'.')
-from src.ndn.svs import SVSync, SVSyncLogger, MissingData
+from ndn.svs import SVSync, SVSyncLogger, MissingData
 
 app = NDNApp()
 
@@ -46,19 +46,20 @@ class Consumer:
     
     # TODO: remove this later -- this is a tempoorary measure to let consumers simulate receiving events from a non-existent producer
     async def run(self) -> None:
-        counter = 1
-        while True:
-            try:
-                if (self.args["node_id"] == "/even" and counter % 2 == 0):
-                    record_changes = self.store_record(str(counter).encode())
-                    self.publish_record_changes(record_changes)
-                elif (self.args["node_id"] == "/odd" and counter % 2 != 0):
-                    record_changes = self.store_record(str(counter).encode())
-                    self.publish_record_changes(record_changes)
-                counter += 1
-            except KeyboardInterrupt:
-                sys.exit()
-            await aio.sleep(1)
+        pass
+        # counter = 1
+        # while True:
+        #     try:
+                # if (self.args["node_id"] == "/even" and counter % 2 == 0):
+                #     record_changes = self.store_record(str(counter).encode())
+                #     self.publish_record_changes(record_changes)
+                # elif (self.args["node_id"] == "/odd" and counter % 2 != 0):
+                #     record_changes = self.store_record(str(counter).encode())
+                #     self.publish_record_changes(record_changes)
+        #         counter += 1
+        #     except KeyboardInterrupt:
+        #         sys.exit()
+        #     await aio.sleep(1)
 
     # Given a log event, create and return an NDN record packet.
     # TODO: This is a temporary implementation. Should actually convert the stuff to packets
@@ -111,7 +112,8 @@ class Consumer:
             while i.lowSeqno <= i.highSeqno:
                 content_str:Optional[bytes] = await self.svs_log_events.fetchData(Name.from_str(i.nid), i.lowSeqno, 2)
                 if content_str:
-                    self.store_record(content_str)
+                    record_changes = self.store_record(content_str)
+                    self.publish_record_changes(record_changes)
                 i.lowSeqno = i.lowSeqno + 1
 
     def records_missing_callback(self, missing_list:List[MissingData]) -> None:

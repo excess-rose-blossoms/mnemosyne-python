@@ -15,12 +15,12 @@ app = NDNApp()
 class Program:
     def __init__(self) -> None:
         self.group_prefix = "/svs/mnemosyne/log_events"
-        self.node_id = "producer_1"
+        self.node_id = "producer_odd"
         self.interval = 1
         self.svs:SVSync = SVSync(app, Name.from_str(self.group_prefix), Name.from_str(self.node_id), self.missing_callback)
         print(f'PRODUCER STARTED! | GROUP PREFIX: {self.group_prefix} | NODE ID: {self.node_id} |')
     async def run(self) -> None:
-        num:int = 0
+        num:int = 1
         while 1:
             num = num+2
             try:
