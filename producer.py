@@ -8,13 +8,13 @@ from ndn.app import NDNApp
 from ndn.encoding import Name
 # Custom Imports
 sys.path.insert(0,'.')
-from src.ndn.svs import SVSync, SVSyncLogger
+from ndn.svs import SVSync, SVSyncLogger
 
 app = NDNApp()
 
 class Program:
     def __init__(self) -> None:
-        self.group_prefix = "/svs/log_events"
+        self.group_prefix = "/svs/mnemosyne/log_events"
         self.node_id = "producer_1"
         self.interval = 1
         self.svs:SVSync = SVSync(app, Name.from_str(self.group_prefix), Name.from_str(self.node_id), None)

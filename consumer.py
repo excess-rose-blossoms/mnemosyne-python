@@ -8,7 +8,7 @@ from ndn.app import NDNApp
 from ndn.encoding import Name
 # Custom Imports
 sys.path.insert(0,'.')
-from src.ndn.svs import SVSync, SVSyncLogger, MissingData
+from ndn.svs import SVSync, SVSyncLogger, MissingData
 
 app = NDNApp()
 
@@ -32,7 +32,7 @@ def parse_cmd_args() -> dict:
 class Program:
     def __init__(self, args:dict) -> None:
         self.args = args
-        self.group_prefix = "/svs/log_events"
+        self.group_prefix = "/svs/mnemosyne/log_events"
         self.svs:SVSync = SVSync(app, Name.from_str(self.group_prefix), Name.from_str(self.args["node_id"]), self.missing_callback)
         self.records_list = []
         self.tails_list = []
