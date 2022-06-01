@@ -16,42 +16,9 @@ stores the record in persistent storage, in both the record and tails section. c
 pop_tail_record(tail_record_name):
 deletes the tail record of name "tail_record_name" from the tail section of persistent storage. returns said tail record. called upon receiving a DEL-TAIL update from another logger, or upon adding a new node that uses the node with name "tail_record_name" as its prior node link.
 
-update_records(record_changes):
-takes in a list of record changes and makes appropriate changes to the storage. the changes are in a list format. called upon receiving an SVS record group update from another logger.
-
 ------------
 CONSUMER
 ------------
-maintains 2 lists:
-- records_list: full list of records.
-- tails_list: list of records that have yet to be referred to by other records in the fields "r1" and "r2".
 
-receives log events from the producer, only accepting those of odd numbers. for simplicity, stores them according to the following format: {"log-event", "r1", r2}
-
-where log event is the number of the log event being stored in the record and r1 and r2 are the numbers of 2 records drawn from tails_list, which are removed from the tails list after being referred to. if there is no more records in the tails_list, r1 and/or r2 can be set to None.
-
-odd-consumer only accepts log events of odd number, but we want records_list and tails_list to consist of a full list of log events, including those with even numbers, which are stored by even-consumer. in order to keep in sync, odd-consumer and even-consumer publishes and retrieve new information about updates to records_list and tails_list periodically via the svs group "/svs/mnemosyne/records_group".
-
-Upon receiving log events, the consumer runs the function:
-```
-// creates and stores record accordingly
-store_record(log_content):
-    pop off new record["r1"] and new_record["r2"] from the tails list. None if no tail records currently
-    new record["log_event"] = log_content
-    add new record to the records list
-    add new record to the tails list
-    update other loggers that:
-        new record has been added to records list
-        new record has been added to tails list
-        records r1 and r2 have been popped off the tails list (if applicable)
-```
-
-Updates are sent to the /svs/mnemosyne/records_group in the following format:
-<ADD-REC/ADD-TAIL/DEL-TAIL> <RECORD>
-ADD-REC: added RECORD to the records list
-ADD-TAIL: added RECORD to the tails list
-DEL-TAIL: popped off RECORD from the tails list
-
-Upon receiving updates from the records group, the logger adds or removes the relevant record from the relevant list. Adding is trivial since you just need to append it, but deletion requires examining each record in linear order to see if it is a match for RECORD-NUM since there is no guarantee each logger has the same tails list. This is a clear candidate for optimization should we have the time, perhaps using some more efficient search algorithm or by passing more information such as an index or even the full tails list to aid in the search and deletion.
-
-NOTE: In order to work on the record group algorithm before we are done with the implementation for the log event group algorithm, we allow our consumers to generate their own events, simulating receiving events from the producer node without actually having to run a producer node (as running more than 2 nodes causes problems at this stage in development). nodes named "even" and "odd" will do this.
+update_records(record_changes):
+takes in a list of record changes and makes appropriate changes to the storage. the changes are in a list format. called upon receiving an SVS record group update from another logger.
