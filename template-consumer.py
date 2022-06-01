@@ -44,22 +44,8 @@ class Consumer:
         self.svs_records:SVSync = SVSync(app, Name.from_str(self.records_group_prefix), Name.from_str(self.args["node_id"]), self.records_missing_callback)
         print(f'CONSUMER STARTED! | LOG GROUP PREFIX: {self.log_events_group_prefix} | RECORDS GROUP PREFIX {self.records_group_prefix} | NODE ID: {self.args["node_id"]} |')
     
-    # TODO: remove this later -- this is a tempoorary measure to let consumers simulate receiving events from a non-existent producer
     async def run(self) -> None:
         pass
-        # counter = 1
-        # while True:
-        #     try:
-                # if (self.args["node_id"] == "/even" and counter % 2 == 0):
-                #     record_changes = self.store_record(str(counter).encode())
-                #     self.publish_record_changes(record_changes)
-                # elif (self.args["node_id"] == "/odd" and counter % 2 != 0):
-                #     record_changes = self.store_record(str(counter).encode())
-                #     self.publish_record_changes(record_changes)
-        #         counter += 1
-        #     except KeyboardInterrupt:
-        #         sys.exit()
-        #     await aio.sleep(1)
 
     # Given a log event, create and return an NDN record packet.
     # TODO: This is a temporary implementation. Should actually convert the stuff to packets
