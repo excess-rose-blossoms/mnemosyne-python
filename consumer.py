@@ -31,11 +31,31 @@ def parse_cmd_args() -> dict:
     args["verbose"] = argvars.verbose
     return args
 
+# each entry is stored like so: {record_name: [link_1, link_2]}
+class RecordStorage:
+    def __init__(self):
+        self.records_list = {}
+        self.tail_records = {}
+
+    def store_record(self, new_record):
+        self.records_list.update(new_record)
+
+    def pop_tail_record(self):
+        if (len(self.tail_records) > 0):
+            name = list(self.tail_records.keys())[0]
+            return self.tail_records.pop(name)
+        return None
+        
+    def get_record(self, record_name):
+        if record_name in self.records_list:
+            return {record_name: self.records_list[record_name]}
+        return None
+
 class Consumer:
     def __init__(self, args:dict) -> None:
         self.args = args
-        self.records_list = []
-        self.tails_list = []
+        self.record_storage = RecordStorage()
+        self.record_changes = []
         # log_events group related (communication between producer and loggers)
         self.log_events_group_prefix = "/svs/mnemosyne/log_events"
         self.svs_log_events:SVSync = SVSync(app, Name.from_str(self.log_events_group_prefix), Name.from_str(self.args["node_id"]), self.log_events_missing_callback)
@@ -48,46 +68,36 @@ class Consumer:
         pass
 
     # Given a log event, create and return an NDN record packet.
-    # TODO: This is a temporary implementation. Should actually convert the stuff to packets
-    def create_record(self, log_event, record_1, record_2):
-        return {"log":log_event, "r1": record_1, "r2": record_2}
-    
-    # Takes care of the behavior of storing the relevant record to the tails and records lists.
-    # Returns an object with information about changes in records
-    def store_record(self, content_str):
-        # Create and store record
-        record_1 = self.tails_list.pop() if (len(self.tails_list) > 0) else None
-        record_2 = self.tails_list.pop() if (len(self.tails_list) > 0) else None
-        new_record = self.create_record(content_str.decode(), (record_1["log"] if record_1 else None), (record_2["log"] if record_2 else None))
-        self.records_list.append(new_record)
-        self.tails_list.append(new_record)
-        # Note and return actions taken
-        record_changes = []
-        record_changes.append("ADD-REC" + " | " + str(new_record))
-        record_changes.append("ADD-TAIL" + " | " + str(new_record))
-        if (record_1):
-            record_changes.append("DEL-TAIL" + " | " + str(record_1))
-        if (record_2):
-            record_changes.append("DEL-TAIL" + " | " + str(record_2))
-        return record_changes
+    # TODO: This is a temporary implementation. Should actually convert the stuff to packets.
+    def create_record(self, log_event):
+        prior_records = [tail for tail in [self.record_storage.pop_tail_record(), self.record_storage.pop_tail_record()] if tail]
+        # Log the tail records removed
+        for prior_record in prior_records:
+            self.record_changes.append("DEL-TAIL " + prior_record)
+        return {str(log_event):prior_records}
 
-    def publish_record_changes(self, record_changes):
-        for change in record_changes:
+    # Creates and stores a record. Notes down the record changes to be published by SVS.
+    def receive_log_event(self, content_str):
+        new_record = self.create_record(content_str.decode())
+        self.record_storage.store_record(new_record)
+        # TODO: Note and return actions taken, publish record changes.
+        self.record_changes.append("ADD-REC " + content_str.decode())
+        self.publish_record_changes()
+
+    def publish_record_changes(self):
+        for change in self.record_changes:
             self.svs_records.publishData(str(change).encode())
+        self.record_changes = []
 
-    # Parse an input list of record changes and make changes to the records accordingly
-    def update_records(self, record_changes_str):
-        split_change = record_changes_str.split(' | ')
-        print(split_change)
-        if split_change[0] == "ADD-REC":
-            self.records_list.append(ast.literal_eval(split_change[1]))
-        elif split_change[0] == "ADD-TAIL":
-            self.tails_list.append(ast.literal_eval(split_change[1]))
-        elif split_change[0] == "DEL-TAIL":
-            try:
-                self.tails_list.remove(ast.literal_eval(split_change[1]))
-            except ValueError:
-                pass
+    def receive_record_changes(self, record_changes):
+        record_change_list = ast.literal_eval(record_changes)
+        for record_change in record_change_list:
+            split_change = record_change.split(" ")
+            if split_change[0] == "ADD-REC":
+                new_record = {split_change[1]:["ah","ah"]}# TODO: express NDN interest and store it in the record storage when it is answered
+                self.record_storage.store_record(new_record)
+            elif split_change[0] == "DEL-TAIL":
+                self.record_storage.pop_tail_record(split_change[1])
         return
 
     def log_events_missing_callback(self, missing_list:List[MissingData]) -> None:
@@ -97,9 +107,8 @@ class Consumer:
         for i in missing_list:
             while i.lowSeqno <= i.highSeqno:
                 content_str:Optional[bytes] = await self.svs_log_events.fetchData(Name.from_str(i.nid), i.lowSeqno, 2)
-                if content_str:
-                    record_changes = self.store_record(content_str)
-                    self.publish_record_changes(record_changes)
+                if content_str: # RELEVANT STUFF HERE
+                    self.receive_log_event(content_str)
                 i.lowSeqno = i.lowSeqno + 1
 
     def records_missing_callback(self, missing_list:List[MissingData]) -> None:
@@ -109,16 +118,8 @@ class Consumer:
         for i in missing_list:
             while i.lowSeqno <= i.highSeqno:
                 content_str:Optional[bytes] = await self.svs_records.fetchData(Name.from_str(i.nid), i.lowSeqno, 2)
-                if content_str:
-                    print("--------------")
-                    print("-BEFORE RECORD UPDATE-")
-                    print("RECORDS: " + str(self.records_list))
-                    print("TAILS: " + str(self.tails_list))
-                    self.update_records(content_str.decode())
-                    print("-AFTER RECORD UPDATE-")
-                    print("RECORDS: " + str(self.records_list))
-                    print("TAILS: " + str(self.tails_list))
-                    print("--------------")
+                if content_str: # RELEVANT STUFF HERE
+                    self.receive_record_changes(content_str.decode())
                 i.lowSeqno = i.lowSeqno + 1
 
 async def start(args:dict) -> None:

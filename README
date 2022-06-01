@@ -1,12 +1,26 @@
-SPEC: 1 PRODUCER, 2 CONSUMERS, ODD/EVEN
+SPEC
 --------
 PRODUCER
 --------
 producer produces log events, each represented by an integer of increasing value.
-it publishes these to the svs group "/svs/mnemosyne/log_events_group"
+it publishes these to the svs group "/svs/mnemosyne/log_events"
 
 ------------
-ODD-CONSUMER
+RECORD_STORE
+------------
+Provides storage functionality to the consumer class to store and retrieve records. Each consumer has its own RecordStore object. Implemented using a simple dict, but in the final version this will use some sort of persistent storage. Gives the following functionality:
+
+store_record(new_record):
+stores the record in persistent storage, in both the record and tails section. called when a new record is created -- either by the logger the store belongs to or receiving an ADD-REC update from another logger.
+
+pop_tail_record(tail_record_name):
+deletes the tail record of name "tail_record_name" from the tail section of persistent storage. returns said tail record. called upon receiving a DEL-TAIL update from another logger, or upon adding a new node that uses the node with name "tail_record_name" as its prior node link.
+
+update_records(record_changes):
+takes in a list of record changes and makes appropriate changes to the storage. the changes are in a list format. called upon receiving an SVS record group update from another logger.
+
+------------
+CONSUMER
 ------------
 maintains 2 lists:
 - records_list: full list of records.
@@ -41,19 +55,3 @@ DEL-TAIL: popped off RECORD from the tails list
 Upon receiving updates from the records group, the logger adds or removes the relevant record from the relevant list. Adding is trivial since you just need to append it, but deletion requires examining each record in linear order to see if it is a match for RECORD-NUM since there is no guarantee each logger has the same tails list. This is a clear candidate for optimization should we have the time, perhaps using some more efficient search algorithm or by passing more information such as an index or even the full tails list to aid in the search and deletion.
 
 NOTE: In order to work on the record group algorithm before we are done with the implementation for the log event group algorithm, we allow our consumers to generate their own events, simulating receiving events from the producer node without actually having to run a producer node (as running more than 2 nodes causes problems at this stage in development). nodes named "even" and "odd" will do this.
-
--------------
-EVEN-CONSUMER
--------------
-the almost-identical counterpart to odd-consumer. only accepts even events.
-
-NOTE: the odd/even behavior is not representative of how the final application will behave, but it is a good test case to be sure that each of the nodes are properly communicating their states.
-
-------------------------
-RUNNING THE APPLICATIONS
-------------------------
-apps can be run by doing:
-nfd-start
-python3 producer.py
-python3 odd-consumer.py
-python3 even-consumer.py

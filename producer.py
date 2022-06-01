@@ -22,7 +22,7 @@ class Program:
     async def run(self) -> None:
         num:int = 0
         while 1:
-            num = num+2
+            num = num+1
             try:
                 print("produced log event: "+str(num))
                 self.svs.publishData(str(num).encode())
