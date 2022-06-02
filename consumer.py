@@ -1,14 +1,16 @@
 import asyncio as aio
 import logging
 import sys
+import random
 from argparse import ArgumentParser, SUPPRESS
-from typing import List, Optional
+from typing import List, Optional, Set
 # NDN Imports
 from ndn.app import NDNApp
-from ndn.encoding import Name
+from ndn.encoding import Name, FormalName
 # Custom Imports
 sys.path.insert(0,'.')
 from ndn.svs import SVSync, SVSyncLogger, MissingData
+from record import Record, GenesisRecord
 
 app = NDNApp()
 
@@ -29,21 +31,14 @@ def parse_cmd_args() -> dict:
     args["verbose"] = argvars.verbose
     return args
 
-# each entry is stored like so: {record_name: [link_1, link_2]}
+# Records are stored as {Name (str): encoded TLV packet}
 class RecordStorage:
     def __init__(self):
         self.records_list = {}
-        self.tail_records = {}
 
-    def store_record(self, new_record):
-        self.records_list.update(new_record)
+    def store_record(self, record_update):
+        self.records_list.update(record_update)
 
-    def pop_tail_record(self):
-        if (len(self.tail_records) > 0):
-            name = list(self.tail_records.keys())[0]
-            return self.tail_records.pop(name)
-        return None
-        
     def get_record(self, record_name):
         if record_name in self.records_list:
             return self.records_list[record_name]
@@ -54,6 +49,11 @@ record_storage = RecordStorage()
 class Logger:
     def __init__(self, args:dict) -> None:
         self.args = args
+        self.last_record_name: FormalName = None
+        self.last_names: List[FormalName] = []
+        self.last_name_tops: int = 0 # ??
+        self.no_prev_records: Set[FormalName] = set() # ??
+        self.num_record_links: int = 2
         # log_events group related (communication between producer and loggers)
         self.log_events_group_prefix = "/svs/mnemosyne/log_events"
         self.svs_log_events:SVSync = SVSync(app, Name.from_str(self.log_events_group_prefix), Name.from_str(self.args["node_id"]), self.log_events_missing_callback)
@@ -61,12 +61,33 @@ class Logger:
         self.records_group_prefix = "/svs/mnemosyne/records"
         self.svs_records:SVSync = SVSync(app, Name.from_str(self.records_group_prefix), Name.from_str(self.args["node_id"]), self.records_missing_callback)
         print(f'CONSUMER STARTED! | LOG GROUP PREFIX: {self.log_events_group_prefix} | RECORDS GROUP PREFIX {self.records_group_prefix} | NODE ID: {self.args["node_id"]} |')
+        self.node_prefix = self.records_group_prefix + self.args['node_id']
+
+        # Make genesis data
+        for i in range(self.num_record_links):
+            gen_rec = GenesisRecord(i)
+            gen_rec_packet = gen_rec.wire_encode()
+            # TODO: sign the packet
+
+            record_storage.store_record(
+                {gen_rec.get_record_name_str(): gen_rec_packet})
+            self.last_names.append(gen_rec.get_record_name())
 
     # Given a log event, create and return an NDN record packet.
-    # TODO: This is a temporary implementation. Should actually convert the stuff to packets.
     def create_record(self, log_event):
-        prior_records = [tail for tail in [record_storage.pop_tail_record(), record_storage.pop_tail_record()] if tail]
-        return {str(log_event):prior_records}
+        record = Record(producer_name=self.node_prefix, log_event=log_event)
+        if (self.last_record_name is not None):
+            record.add_pointer(self.last_record_name)
+        no_prev_records_strings = map(lambda name: Name.to_str(name), self.no_prev_records)
+        record_list = [
+            rec_name for rec_name in self.last_names if (
+                Name.to_str(rec_name) not in no_prev_records_strings)]
+        random.shuffle(record_list)
+        for tail_rec in record_list:
+            record.add_pointer(tail_rec)
+            if (len(record.get_pointers_from_header()) >= self.num_record_links):
+                break
+        return record
 
     def log_events_missing_callback(self, missing_list:List[MissingData]) -> None:
         aio.ensure_future(self.on_missing_events(missing_list))
@@ -83,14 +104,24 @@ class Logger:
 
                 i.lowSeqno = i.lowSeqno + 1
 
-    # Creates and stores a record. Notes down the record changes to be published by SVS.
+    # Creates, stores, and publishes a record.
     def receive_log_event(self, content_str):
         # TODO: authenticate log event
+
+        # Create record.
         new_record = self.create_record(content_str.decode())
-        # TODO: update tails list
-        record_storage.store_record(new_record)
-        # TODO: change this to send the actual record
-        self.svs_records.publishData("ADD-REC ".encode() + content_str)
+        # Encode for sending/storage.
+        record_packet = new_record.wire_encode()
+
+        # TODO: Sign the data packet
+
+        record_storage.store_record({new_record.get_record_name_str(): record_packet})
+        self.last_record_name = new_record.get_record_name()
+
+        print("publishing record:")
+        new_record.print()
+
+        self.svs_records.publishData(record_packet)
 
     def records_missing_callback(self, missing_list:List[MissingData]) -> None:
         aio.ensure_future(self.on_missing_records(missing_list))
@@ -100,14 +131,31 @@ class Logger:
             while i.lowSeqno <= i.highSeqno:
                 content_str:Optional[bytes] = await self.svs_records.fetchData(Name.from_str(i.nid), i.lowSeqno, 2)
                 if content_str:
-                    self.receive_records(content_str.decode())
+                    self.receive_records(content_str)
                 i.lowSeqno = i.lowSeqno + 1
 
-    def receive_records(self, record_changes):
-        # TODO: parse record
-        # TODO: verify record by tracing back to root
-        # TODO: save record
-        print(record_changes)
+    def receive_records(self, received_data):
+        received_record = Record(data=received_data)
+        print("received record:")
+        received_record.print()
+
+        # Verify record
+        received_record.check_pointer_count(self.num_record_links)
+        self.verify_previous_record(received_record)
+
+        # Save record
+        record_storage.store_record(
+            {received_record.get_record_name_str(): received_data})
+
+        # TODO: might want to adjust the algorithm for picking which record to link to
+        self.last_names[self.last_name_tops] = received_record.get_record_name()
+        self.last_name_tops = (self.last_name_tops + 1) % len(self.last_names)
+
+        # TODO: get event out of received record and verify it then add it to a set of seen events so users can see it
+
+    # TODO: This recursive function should verify a record by tracing back to the root
+    def verify_previous_record(self, record: Record) -> None:
+        pass
 
 
 async def start(args:dict) -> None:

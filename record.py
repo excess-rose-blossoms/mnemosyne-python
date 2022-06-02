@@ -1,5 +1,5 @@
 from typing import List
-from ndn.encoding import *
+from ndn.encoding import Component, Name, FormalName, NonStrictName, TlvModel, BytesField, RepeatedField
 
 # A note about names:
 # Name is a class of helper functions for names; you never instantiate a Name.
@@ -27,7 +27,7 @@ class Record:
                  record_name: NonStrictName = None,
                  producer_name: NonStrictName = None,
                  log_event = None,
-                 data: RecordTlv = None):
+                 data: bytearray = None):
         self.record_name: FormalName = None
         self.record_pointers: List[FormalName] = []
         self.log_event = None # TODO: figure out type for this and change name to event
@@ -40,17 +40,16 @@ class Record:
             # Create record from producer name + event
             # Used when generating our own records.
             self.record_name: FormalName = Name.normalize(
-                producer_name + "RECORD" + eventname)   # TODO: figure out how to get name from event
+                producer_name + "/RECORD/" + log_event)   # TODO: figure out how to get name from event
             self.log_event = log_event
         elif (data is not None):
-            # Create record from data.
+            # Create record from raw data.
             # Used when creating a Record to represent a received Record.
             self.record_tlv: RecordTlv = RecordTlv.parse(data)
             self.record_name = Name.from_bytes(self.record_tlv.record_name)
             for ptr in self.record_tlv.record_pointers:
                 self.record_pointers.append(Name.from_bytes(ptr))
-            # TODO: Deal with this.
-            self.log_event
+            self.log_event = self.record_tlv.log_event.tobytes().decode()
         else:
             raise RuntimeError('Invalid call to Record constructor')
     
@@ -67,6 +66,8 @@ class Record:
     # e.g., /<producer-prefix>/RECORD/<event-name>
     def get_record_name(self) -> FormalName:
         return self.record_name
+    def get_record_name_str(self) -> str:
+        return Name.to_str(self.record_name)
 
     # Get the name of the underlying event.
     # i.e., the <event-name> in /<producer-prefix>/RECORD/<event-name>
@@ -134,8 +135,22 @@ class Record:
                 return True
         return False
 
+    # Print all info for debugging
+    def print(self) -> None:
+        print("Record:\t" + Name.to_str(self.get_record_name()))
+        print("Link1:\t" + Name.to_str(self.record_pointers[0]))
+        print("Link2:\t" + Name.to_str(self.record_pointers[1]))
+        print("Log event:\t" + self.get_log_event())
+        print("Encoded:")
+        if (self.record_tlv is not None):
+            print(self.record_tlv.encode())
+        else:
+            print(None)
+        # print("Genesis record:\t" + str(self.is_genesis_record()))
+        print('')
+
 class GenesisRecord(Record):
     def __init__(self, number: int):
         super().__init__(record_name="/mnemosyne/GENESIS_RECORD/" + str(number))
         # TODO: set to empty log event
-        self.set_log_event()
+        self.set_log_event("")
