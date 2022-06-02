@@ -1,8 +1,6 @@
 import asyncio as aio
 import logging
 import sys
-import time
-import ast
 from argparse import ArgumentParser, SUPPRESS
 from typing import List, Optional
 # NDN Imports
@@ -53,11 +51,9 @@ class RecordStorage:
 
 record_storage = RecordStorage()
 
-class Consumer:
+class Logger:
     def __init__(self, args:dict) -> None:
         self.args = args
-        self.record_changes = []
-        self.interest_queue = []
         # log_events group related (communication between producer and loggers)
         self.log_events_group_prefix = "/svs/mnemosyne/log_events"
         self.svs_log_events:SVSync = SVSync(app, Name.from_str(self.log_events_group_prefix), Name.from_str(self.args["node_id"]), self.log_events_missing_callback)
@@ -66,73 +62,20 @@ class Consumer:
         self.svs_records:SVSync = SVSync(app, Name.from_str(self.records_group_prefix), Name.from_str(self.args["node_id"]), self.records_missing_callback)
         print(f'CONSUMER STARTED! | LOG GROUP PREFIX: {self.log_events_group_prefix} | RECORDS GROUP PREFIX {self.records_group_prefix} | NODE ID: {self.args["node_id"]} |')
 
-    async def run(self) -> None:
-        if (len(self.interest_queue) > 0):
-            try:
-                data_name, meta_info, content = await app.express_interest(
-                    # Interest Name
-                    '/mnemosyne/record_interest/' + self.interest_queue.pop(),
-                    must_be_fresh=True,
-                    can_be_prefix=False,
-                    lifetime=6000)
-                record_storage.store_record({Name.to_str(data_name):bytes(content)})
-            except InterestNack as e:
-                # A NACK is received
-                print(f'Nacked with reason={e.reason}')
-            except InterestTimeout:
-                # Interest times out
-                print(f'Timeout')
-            except InterestCanceled:
-                # Connection to NFD is broken
-                print(f'Canceled')
-            except ValidationFailure:
-                # Validation failure
-                print(f'Data failed to validate')
-
-    @app.route('/mnemosyne/record_interest')
-    def on_interest(name, interest_param, application_param):
-        retrieved_record = record_storage.get_record(name)
-        if retrieved_record:
-            app.put_data(name, content=retrieved_record, freshness_period=10000)
-
     # Given a log event, create and return an NDN record packet.
     # TODO: This is a temporary implementation. Should actually convert the stuff to packets.
     def create_record(self, log_event):
         prior_records = [tail for tail in [record_storage.pop_tail_record(), record_storage.pop_tail_record()] if tail]
-        # Log the tail records removed
-        for prior_record in prior_records:
-            self.record_changes.append("DEL-TAIL " + prior_record)
         return {str(log_event):prior_records}
 
-    # Creates and stores a record. Notes down the record changes to be published by SVS.
-    def receive_log_event(self, content_str):
-        new_record = self.create_record(content_str.decode())
-        record_storage.store_record(new_record)
-        self.record_changes.append("ADD-REC " + content_str.decode())
-        self.publish_record_changes()
-
-    def publish_record_changes(self):
-        self.svs_records.publishData(str(self.record_changes).encode())
-        self.record_changes = []
-
-    def receive_record_changes(self, record_changes):
-        record_change_list = ast.literal_eval(record_changes)
-        for record_change in record_change_list:
-            split_change = record_change.split(" ")
-            if split_change[0] == "ADD-REC":
-                self.interest_queue.append(split_change[1])
-            elif split_change[0] == "DEL-TAIL":
-                record_storage.pop_tail_record(split_change[1])
-        return
-
     def log_events_missing_callback(self, missing_list:List[MissingData]) -> None:
-        aio.ensure_future(self.log_events_on_missing_data(missing_list))
+        aio.ensure_future(self.on_missing_events(missing_list))
 
-    async def log_events_on_missing_data(self, missing_list:List[MissingData]) -> None:
+    async def on_missing_events(self, missing_list:List[MissingData]) -> None:
         for i in missing_list:
             while i.lowSeqno <= i.highSeqno:
                 content_str:Optional[bytes] = await self.svs_log_events.fetchData(Name.from_str(i.nid), i.lowSeqno, 2)
-                if content_str: # RELEVANT STUFF HERE
+                if content_str:
                     self.receive_log_event(content_str)
                     # if ((self.args["node_id"] == "/even" and int(content_str.decode()) % 2 == 0)
                     #     or (self.args["node_id"] == "/odd" and int(content_str.decode()) % 2 == 1)):
@@ -140,20 +83,35 @@ class Consumer:
 
                 i.lowSeqno = i.lowSeqno + 1
 
-    def records_missing_callback(self, missing_list:List[MissingData]) -> None:
-        aio.ensure_future(self.records_on_missing_data(missing_list))
+    # Creates and stores a record. Notes down the record changes to be published by SVS.
+    def receive_log_event(self, content_str):
+        # TODO: authenticate log event
+        new_record = self.create_record(content_str.decode())
+        # TODO: update tails list
+        record_storage.store_record(new_record)
+        # TODO: change this to send the actual record
+        self.svs_records.publishData("ADD-REC ".encode() + content_str)
 
-    async def records_on_missing_data(self, missing_list:List[MissingData]) -> None:
+    def records_missing_callback(self, missing_list:List[MissingData]) -> None:
+        aio.ensure_future(self.on_missing_records(missing_list))
+
+    async def on_missing_records(self, missing_list:List[MissingData]) -> None:
         for i in missing_list:
             while i.lowSeqno <= i.highSeqno:
                 content_str:Optional[bytes] = await self.svs_records.fetchData(Name.from_str(i.nid), i.lowSeqno, 2)
-                if content_str: # RELEVANT STUFF HERE
-                    self.receive_record_changes(content_str.decode())
+                if content_str:
+                    self.receive_records(content_str.decode())
                 i.lowSeqno = i.lowSeqno + 1
 
+    def receive_records(self, record_changes):
+        # TODO: parse record
+        # TODO: verify record by tracing back to root
+        # TODO: save record
+        print(record_changes)
+
+
 async def start(args:dict) -> None:
-    cons = Consumer(args)
-    await cons.run()
+    logger = Logger(args)
 
 def main() -> int:
     args = parse_cmd_args()
@@ -165,6 +123,7 @@ def main() -> int:
         app.run_forever(after_start=start(args))
     except (FileNotFoundError, ConnectionRefusedError):
         print('Error: could not connect to NFD for SVS.')
+        return 1
 
     return 0
 
