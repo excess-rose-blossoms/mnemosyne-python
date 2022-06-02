@@ -71,7 +71,7 @@ class Consumer:
             try:
                 data_name, meta_info, content = await app.express_interest(
                     # Interest Name
-                    '/mnemosyne/record_interest' + self.interest_queue.pop(),
+                    '/mnemosyne/record_interest/' + self.interest_queue.pop(),
                     must_be_fresh=True,
                     can_be_prefix=False,
                     lifetime=6000)
@@ -112,8 +112,7 @@ class Consumer:
         self.publish_record_changes()
 
     def publish_record_changes(self):
-        for change in self.record_changes:
-            self.svs_records.publishData(str(change).encode())
+        self.svs_records.publishData(str(self.record_changes).encode())
         self.record_changes = []
 
     def receive_record_changes(self, record_changes):
@@ -121,7 +120,7 @@ class Consumer:
         for record_change in record_change_list:
             split_change = record_change.split(" ")
             if split_change[0] == "ADD-REC":
-                new_record = self.interest_queue.append(split_change[1])
+                self.interest_queue.append(split_change[1])
             elif split_change[0] == "DEL-TAIL":
                 record_storage.pop_tail_record(split_change[1])
         return
@@ -135,6 +134,10 @@ class Consumer:
                 content_str:Optional[bytes] = await self.svs_log_events.fetchData(Name.from_str(i.nid), i.lowSeqno, 2)
                 if content_str: # RELEVANT STUFF HERE
                     self.receive_log_event(content_str)
+                    # if ((self.args["node_id"] == "/even" and int(content_str.decode()) % 2 == 0)
+                    #     or (self.args["node_id"] == "/odd" and int(content_str.decode()) % 2 == 1)):
+                    #     self.receive_log_event(content_str)
+
                 i.lowSeqno = i.lowSeqno + 1
 
     def records_missing_callback(self, missing_list:List[MissingData]) -> None:
