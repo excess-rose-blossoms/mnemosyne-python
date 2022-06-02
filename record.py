@@ -1,4 +1,3 @@
-from enum import Enum
 from typing import List
 from ndn.encoding import *
 
@@ -12,34 +11,57 @@ from ndn.encoding import *
 # Name.normalize converts NonStrictName to FormalName.
 # Record.record_name should be a FormalName.
 
-class RecordType(Enum):
-    BASE_RECORD = 0
-    GENERIC_RECORD = 1
-    CERTIFICATE_RECORD = 2
-    REVOCATION_RECORD = 3
-    GENESIS_RECORD = 4
+class RecordTypes:
+    RECORD_NAME = 301
+    RECORD_POINTER = 302
+    LOG_EVENT = 303
 
+class RecordTlv(TlvModel):
+    record_name = BytesField(RecordTypes.RECORD_NAME)
+    record_pointers = RepeatedField(BytesField(RecordTypes.RECORD_POINTER))
+    log_event = BytesField(RecordTypes.LOG_EVENT)
 
-class Record(TlvModel):
+class Record:
 
     def __init__(self,
-                 record_name: NonStrictName,
-                 record_type: RecordType = None,
-                 data = None):
-        self.record_name:FormalName = Name.normalize(record_name)
-        self.record_type:RecordType = record_type
-        self.data = data # TODO: figure out type for this and call constructor if necessary
-        self.record_pointers:List[FormalName] = []
-        self.content_item = None # TODO: figure out type for this
+                 record_name: NonStrictName = None,
+                 producer_name: NonStrictName = None,
+                 log_event = None,
+                 data: RecordTlv = None):
+        self.record_name: FormalName = None
+        self.record_pointers: List[FormalName] = []
+        self.log_event = None # TODO: figure out type for this and change name to event
+        self.record_tlv: RecordTlv = None
+        if (record_name is not None):
+            # Create record with the name as provided.
+            # Used for genesis records.
+            self.record_name: FormalName = Name.normalize(record_name)
+        elif (producer_name is not None and log_event is not None):
+            # Create record from producer name + event
+            # Used when generating our own records.
+            self.record_name: FormalName = Name.normalize(
+                producer_name + "RECORD" + eventname)   # TODO: figure out how to get name from event
+            self.log_event = log_event
+        elif (data is not None):
+            # Create record from data.
+            # Used when creating a Record to represent a received Record.
+            self.record_tlv: RecordTlv = RecordTlv.parse(data)
+            self.record_name = Name.from_bytes(self.record_tlv.record_name)
+            for ptr in self.record_tlv.record_pointers:
+                self.record_pointers.append(Name.from_bytes(ptr))
+            # TODO: Deal with this.
+            self.log_event
+        else:
+            raise RuntimeError('Invalid call to Record constructor')
     
     # Get the NDN data full name of the record.
     # This is not the record's identifier.
     # The name is only generated when adding the record into the ledger.
     # This can only be used to parse a record returned from the ledger.
-    def get_record_full_name(self) -> FormalName:
-        if (self.data is not None):
-            return self.data.get_full_name() # TODO: implement that
-        return []
+    # def get_record_full_name(self) -> FormalName:
+    #     if (self.record_tlv is not None):
+    #         return self.record_tlv.get_full_name() # TODO: implement that
+    #     return []
 
     # Get the record's name.
     # e.g., /<producer-prefix>/RECORD/<event-name>
@@ -50,32 +72,21 @@ class Record(TlvModel):
     # i.e., the <event-name> in /<producer-prefix>/RECORD/<event-name>
     def get_event_name(self) -> FormalName:
         for i in range(len(self.record_name) - 1):
-            if (Component.to_str(self.record_name[i]) == "RECORD"
-                    or Component.to_str(self.record_name[i]) == "GENESIS_RECORD"):
+            if (Component.to_str(self.record_name[i]) == "GENESIS_RECORD"
+                    or Component.to_str(self.record_name[i]) == "RECORD"):
                 return [self.record_name[i + 1]]
         return []
     
-    # TODO: figure out argument type (Block in Mnemosyne)
-    # Add a new payload item into the record.
+    # TODO: figure out argument type
+    # Add the log event to the record.
     # Should only be used in generating record before adding it to ledger.
-    def set_content_item(self, content_item) -> None:
-        self.content_item = content_item
+    def set_log_event(self, log_event) -> None:
+        self.log_event = log_event
     
-    # TODO: figure out return type (Block in Mnemosyne)
+    # TODO: figure out return type
     # Get record payload.
-    def get_content_item(self):
-        return self.content_item
-
-    # Get record type.
-    def get_type(self) -> RecordType:
-        return self.record_type
-
-    # TODO: implmenet self.content_item.is_valid()
-    # Check if the record body is empty.
-    def is_empty(self) -> bool:
-        return (self.data is None
-                and len(self.record_pointers) == 0
-                and not self.content_item.is_valid())
+    def get_log_event(self):
+        return self.log_event
     
     # Get this record's pointers to other records.
     def get_pointers_from_header(self) -> List[FormalName]:
@@ -83,7 +94,7 @@ class Record(TlvModel):
 
     # Add a pointer to another record.
     def add_pointer(self, pointer: FormalName) -> None:
-        if (self.data is not None):
+        if (self.record_tlv is not None):
             raise RuntimeError('add_pointer tried to modify an already-built record.')
         self.record_pointers.append(pointer)
 
@@ -99,14 +110,32 @@ class Record(TlvModel):
                 raise RuntimeError('Duplicate pointer detected.')
             pointers_copy.append(pointer)
 
-    # TODO: figure out type of block
-    def wire_encode(self, block) -> None:
-        self.header_wire_encode(block)
-        self.body_wire_encode(block)
-    
-    def header_wire_encode(self, block) -> None:
-        pass
+    def get_producer_prefix(self) -> FormalName:
+        for i in range(len(self.record_name - 1)):
+            if (Component.to_str(self.record_name[i]) == "GENESIS_RECORD"
+                    or Component.to_str(self.record_name[i]) == "RECORD"):
+                return self.record_name[:i]
+        return []
 
-    def body_wire_encode(self, block) -> None:
-        pass
+    def wire_encode(self) -> bytearray:
+        self.record_tlv = RecordTlv()
+        self.record_tlv.record_name = Name.to_bytes(self.record_name)
+        for ptr in self.record_pointers:
+            self.record_tlv.record_pointers.append(Name.to_bytes(ptr))
+        # TODO: figure out how to encode log event
+        self.record_tlv.log_event = self.log_event.encode()
+        return self.record_tlv.encode()
 
+    def is_genesis_record(self) -> bool:
+        for i in range(len(self.record_name) - 1):
+            if (Component.to_str(self.record_name[i]) == "RECORD"):
+                return False
+            if (Component.to_str(self.record_name[i]) == "GENESIS_RECORD"):
+                return True
+        return False
+
+class GenesisRecord(Record):
+    def __init__(self, number: int):
+        super().__init__(record_name="/mnemosyne/GENESIS_RECORD/" + str(number))
+        # TODO: set to empty log event
+        self.set_log_event()
