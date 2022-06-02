@@ -2,8 +2,8 @@ SPEC
 --------
 PRODUCER
 --------
-producer produces log events, each represented by an integer of increasing value.
-it publishes these to the svs group "/svs/mnemosyne/log_events"
+A sample data producer for testing. Produces log events, each represented by an integer of increasing value.
+It publishes these through SVS with the prefix "/svs/mnemosyne/log_events"
 
 ------------
 RECORD_STORE
@@ -22,3 +22,10 @@ CONSUMER
 
 update_records(record_changes):
 takes in a list of record changes and makes appropriate changes to the storage. the changes are in a list format. called upon receiving an SVS record group update from another logger.
+
+------------
+RECORD
+------------
+Represents a log record. It contains a Name, two pointers to previous records (Names), and an event.
+A Record objects also has a RecordTlv object, which is the actual data packet that will be encoded
+and stored/shared. This class also has several functions for working with Records.
