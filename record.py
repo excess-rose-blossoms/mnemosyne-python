@@ -46,13 +46,16 @@ class Record:
         else:
             raise RuntimeError('Invalid call to Record constructor')
     
+    # This is commented out because full names are currently no
+    # different than NDN record names, because names don't contain
+    # hashes yet.
     # Get the NDN data full name of the record.
     # This is not the record's identifier.
     # The name is only generated when adding the record into the ledger.
     # This can only be used to parse a record returned from the ledger.
     # def get_record_full_name(self) -> FormalName:
     #     if (self.record_tlv is not None):
-    #         return self.record_tlv.get_full_name() # TODO: implement that
+    #         return self.record_tlv.get_full_name()
     #     return []
 
     # Get the record's name.

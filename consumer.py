@@ -41,7 +41,7 @@ class RecordStorage:
 
     def get_record(self, record_name):
         if record_name in self.records_list:
-            return self.records_list[record_name]
+            return Record(data=self.records_list[record_name])
         return None
 
 record_storage = RecordStorage()
