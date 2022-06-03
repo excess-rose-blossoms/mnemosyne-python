@@ -1,4 +1,5 @@
 import asyncio as aio
+import dbm
 import logging
 import sys
 import random
@@ -33,16 +34,27 @@ def parse_cmd_args() -> dict:
 
 # Records are stored as {Name (str): encoded TLV packet}
 class RecordStorage:
-    def __init__(self):
-        self.records_list = {}
+    # If another process is using the DB, wait for it to be done.
+    def get_db(self, db_name):
+        while True:
+            try:
+                db = dbm.open(db_name, 'c')
+                return db
+            except:
+                pass
 
-    def store_record(self, record_update):
-        self.records_list.update(record_update)
+    def store_record(self, record_name: str, encoded_record: bytearray):
+        db = self.get_db('record_store')
+        db[record_name] = bytes(encoded_record)
+        db.close()
 
     def get_record(self, record_name):
-        if record_name in self.records_list:
-            return Record(data=self.records_list[record_name])
-        return None
+        db = self.get_db('record_store')
+        ret = None
+        if record_name in db:
+            ret = Record(data=db[record_name])
+        db.close()
+        return ret
 
 record_storage = RecordStorage()
 
@@ -75,7 +87,7 @@ class Logger:
             # TODO: sign the packet
 
             record_storage.store_record(
-                {gen_rec.get_record_name_str(): gen_rec_packet})
+                gen_rec.get_record_name_str(), gen_rec_packet)
             self.last_names.append(gen_rec.get_record_name())
 
     # Given a log event, create and return an NDN record packet.
@@ -125,7 +137,8 @@ class Logger:
 
         # TODO: Sign the data packet
 
-        record_storage.store_record({new_record.get_record_name_str(): record_packet})
+        record_storage.store_record(
+            new_record.get_record_name_str(), record_packet)
         self.last_record_name = new_record.get_record_name()
 
         print("publishing record:")
@@ -155,9 +168,8 @@ class Logger:
 
         # Save record
         record_storage.store_record(
-            {received_record.get_record_name_str(): received_data})
+            received_record.get_record_name_str(), received_data)
 
-        # TODO: might want to adjust the algorithm for picking which record to link to
         self.last_names[self.last_name_tops] = received_record.get_record_name()
         self.last_name_tops = (self.last_name_tops + 1) % len(self.last_names)
 
