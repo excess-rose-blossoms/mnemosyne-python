@@ -1,24 +1,31 @@
-Insert README here
+SPEC
+--------
+PRODUCER
+--------
+A sample data producer for testing. Produces log events, each represented by an integer of increasing value.
+It publishes these through SVS with the prefix "/svs/mnemosyne/log_events"
 
+------------
+RECORD_STORE
+------------
+Provides storage functionality to the consumer class to store and retrieve records. Each consumer has its own RecordStore object. Implemented using a simple dict, but in the final version this will use some sort of persistent storage. Gives the following functionality:
 
-Helpful SVS Code:
+store_record(new_record):
+stores the record in persistent storage, in both the record and tails section. called when a new record is created -- either by the logger the store belongs to or receiving an ADD-REC update from another logger.
 
+pop_tail_record(tail_record_name):
+deletes the tail record of name "tail_record_name" from the tail section of persistent storage. returns said tail record. called upon receiving a DEL-TAIL update from another logger, or upon adding a new node that uses the node with name "tail_record_name" as its prior node link.
 
-import asyncio as aio
-import logging
-import sys
-from argparse import ArgumentParser, SUPPRESS
-from typing import List, Optional
-# NDN Imports
-from ndn.app import NDNApp
-from ndn.encoding import Name
-# Custom Imports
-sys.path.insert(0,'.')
-from ndn.svs import SVSync, SVSyncLogger, MissingData
+------------
+CONSUMER
+------------
 
-app = NDNApp()
+update_records(record_changes):
+takes in a list of record changes and makes appropriate changes to the storage. the changes are in a list format. called upon receiving an SVS record group update from another logger.
 
-def foo():
-    return 0
-
-svs = SVSync(app, Name.from_str("/mnemosyne"), Name.from_str("1"), foo)
+------------
+RECORD
+------------
+Represents a log record. It contains a Name, two pointers to previous records (Names), and an event.
+A Record objects also has a RecordTlv object, which is the actual data packet that will be encoded
+and stored/shared. This class also has several functions for working with Records.
