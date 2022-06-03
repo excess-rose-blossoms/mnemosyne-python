@@ -3,7 +3,7 @@ import logging
 import sys
 import random
 from argparse import ArgumentParser, SUPPRESS
-from typing import List, Optional, Set
+from typing import List, Optional, Set, Tuple
 # NDN Imports
 from ndn.app import NDNApp
 from ndn.encoding import Name, FormalName
@@ -49,10 +49,15 @@ record_storage = RecordStorage()
 class Logger:
     def __init__(self, args:dict) -> None:
         self.args = args
+        # The last record this logger produced.
         self.last_record_name: FormalName = None
+        # Some recently-received records (same length as num. genesis records).
         self.last_names: List[FormalName] = []
-        self.last_name_tops: int = 0 # ??
-        self.no_prev_records: Set[FormalName] = set() # ??
+        # An index into self.last_names.
+        self.last_name_tops: int = 0
+        # The records we've received but haven't been able to verify yet.
+        self.no_prev_records: Set[str] = set()
+        self.waiting_referenced_records: List[Tuple[str, str]] = []
         self.num_record_links: int = 2
         # log_events group related (communication between producer and loggers)
         self.log_events_group_prefix = "/svs/mnemosyne/log_events"
@@ -80,11 +85,9 @@ class Logger:
                         event_name=event_name)
         if (self.last_record_name is not None):
             record.add_pointer(self.last_record_name)
-        no_prev_records_strings = map(lambda name: Name.to_str(name),
-                                      self.no_prev_records)
         record_list = [
             rec_name for rec_name in self.last_names if (
-                Name.to_str(rec_name) not in no_prev_records_strings)]
+                Name.to_str(rec_name) not in self.no_prev_records)]
         random.shuffle(record_list)
         for tail_rec in record_list:
             record.add_pointer(tail_rec)
@@ -160,10 +163,27 @@ class Logger:
 
         # TODO: get event out of received record and verify it then add it to a set of seen events so users can see it
 
-    # TODO: This recursive function should verify a record by tracing back to the root
+    # Verify a record by tracing back to the root.
+    # TODO: Recursive verification. Right now, this just checks that each of the links is there, not that they're also verified.
     def verify_previous_record(self, record: Record) -> None:
-        pass
+        for ptr in record.get_pointers_from_header():
+            if (Name.to_str(ptr) in self.no_prev_records
+                    or record_storage.get_record(Name.to_str(ptr)) is None):
+                self.waiting_referenced_records.append((Name.to_str(ptr), record.get_record_name_str()))
+                self.no_prev_records.add(record.get_record_name_str())
 
+        waiting_list: List[str] = []
+        wrr_copy = self.waiting_referenced_records
+        self.waiting_referenced_records = []
+        for pair in wrr_copy:
+            if (pair[0] == record.get_record_name_str()):
+                waiting_list.append(pair[1])
+                self.no_prev_records.discard(pair[1])
+            else:
+                self.waiting_referenced_records.append(pair)
+
+        for record_name in waiting_list:
+            self.verify_previous_record(record_storage.get_record(record_name))
 
 async def start(args:dict) -> None:
     logger = Logger(args)
