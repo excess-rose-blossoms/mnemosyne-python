@@ -1,16 +1,6 @@
 from typing import List
 from ndn.encoding import Component, Name, FormalName, NonStrictName, TlvModel, BytesField, RepeatedField
 
-# A note about names:
-# Name is a class of helper functions for names; you never instantiate a Name.
-# Similarly, Component is a class of functions for processing name components.
-# FormalName and NonStrictName are just aliases.
-# FormalName = List[BinaryStr] -- a list of name components.
-# NonStrictName = Union[Iterable[Union[BinaryStr, str]], str, BinaryStr]
-# NonStrictName can be several different formats, string is easiest.
-# Name.normalize converts NonStrictName to FormalName.
-# Record.record_name should be a FormalName.
-
 class RecordTypes:
     RECORD_NAME = 301
     RECORD_POINTER = 302
@@ -26,21 +16,24 @@ class Record:
     def __init__(self,
                  record_name: NonStrictName = None,
                  producer_name: NonStrictName = None,
-                 log_event = None,
+                 log_event: str = None,
+                 event_name: FormalName = None,
                  data: bytearray = None):
         self.record_name: FormalName = None
         self.record_pointers: List[FormalName] = []
-        self.log_event = None # TODO: figure out type for this and change name to event
+        self.log_event: str = None
         self.record_tlv: RecordTlv = None
         if (record_name is not None):
             # Create record with the name as provided.
             # Used for genesis records.
             self.record_name: FormalName = Name.normalize(record_name)
-        elif (producer_name is not None and log_event is not None):
+        elif (producer_name is not None
+              and log_event is not None
+              and event_name is not None):
             # Create record from producer name + event
             # Used when generating our own records.
-            self.record_name: FormalName = Name.normalize(
-                producer_name + "/RECORD/" + log_event)   # TODO: figure out how to get name from event
+            self.record_name: FormalName = (
+                Name.normalize(producer_name + "/RECORD/") + event_name)
             self.log_event = log_event
         elif (data is not None):
             # Create record from raw data.
@@ -77,18 +70,16 @@ class Record:
                     or Component.to_str(self.record_name[i]) == "RECORD"):
                 return [self.record_name[i + 1]]
         return []
-    
-    # TODO: figure out argument type
+
     # Add the log event to the record.
     # Should only be used in generating record before adding it to ledger.
-    def set_log_event(self, log_event) -> None:
+    def set_log_event(self, log_event: str) -> None:
         self.log_event = log_event
-    
-    # TODO: figure out return type
+
     # Get record payload.
-    def get_log_event(self):
+    def get_log_event(self) -> str:
         return self.log_event
-    
+
     # Get this record's pointers to other records.
     def get_pointers_from_header(self) -> List[FormalName]:
         return self.record_pointers
@@ -123,7 +114,6 @@ class Record:
         self.record_tlv.record_name = Name.to_bytes(self.record_name)
         for ptr in self.record_pointers:
             self.record_tlv.record_pointers.append(Name.to_bytes(ptr))
-        # TODO: figure out how to encode log event
         self.record_tlv.log_event = self.log_event.encode()
         return self.record_tlv.encode()
 
@@ -146,11 +136,9 @@ class Record:
             print(self.record_tlv.encode())
         else:
             print(None)
-        # print("Genesis record:\t" + str(self.is_genesis_record()))
         print('')
 
 class GenesisRecord(Record):
     def __init__(self, number: int):
         super().__init__(record_name="/mnemosyne/GENESIS_RECORD/" + str(number))
-        # TODO: set to empty log event
         self.set_log_event("")

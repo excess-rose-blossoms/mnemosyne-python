@@ -74,42 +74,49 @@ class Logger:
             self.last_names.append(gen_rec.get_record_name())
 
     # Given a log event, create and return an NDN record packet.
-    def create_record(self, log_event):
-        record = Record(producer_name=self.node_prefix, log_event=log_event)
+    def create_record(self, log_event, event_name):
+        record = Record(producer_name=self.node_prefix,
+                        log_event=log_event,
+                        event_name=event_name)
         if (self.last_record_name is not None):
             record.add_pointer(self.last_record_name)
-        no_prev_records_strings = map(lambda name: Name.to_str(name), self.no_prev_records)
+        no_prev_records_strings = map(lambda name: Name.to_str(name),
+                                      self.no_prev_records)
         record_list = [
             rec_name for rec_name in self.last_names if (
                 Name.to_str(rec_name) not in no_prev_records_strings)]
         random.shuffle(record_list)
         for tail_rec in record_list:
             record.add_pointer(tail_rec)
-            if (len(record.get_pointers_from_header()) >= self.num_record_links):
+            if (len(record.get_pointers_from_header())
+                    >= self.num_record_links):
                 break
         return record
 
-    def log_events_missing_callback(self, missing_list:List[MissingData]) -> None:
+    def log_events_missing_callback(self, missing_list: List[MissingData]) -> None:
         aio.ensure_future(self.on_missing_events(missing_list))
 
-    async def on_missing_events(self, missing_list:List[MissingData]) -> None:
+    async def on_missing_events(self, missing_list: List[MissingData]) -> None:
         for i in missing_list:
             while i.lowSeqno <= i.highSeqno:
-                content_str:Optional[bytes] = await self.svs_log_events.fetchData(Name.from_str(i.nid), i.lowSeqno, 2)
+                content_str:Optional[bytes] = (await
+                    self.svs_log_events.fetchData(
+                        Name.from_str(i.nid), i.lowSeqno, 2))
                 if content_str:
-                    self.receive_log_event(content_str)
+                    self.receive_log_event(
+                        content_str, self.svs_log_events.getDataName(
+                            Name.from_str(i.nid), i.lowSeqno))
                     # if ((self.args["node_id"] == "/even" and int(content_str.decode()) % 2 == 0)
                     #     or (self.args["node_id"] == "/odd" and int(content_str.decode()) % 2 == 1)):
                     #     self.receive_log_event(content_str)
-
                 i.lowSeqno = i.lowSeqno + 1
 
     # Creates, stores, and publishes a record.
-    def receive_log_event(self, content_str):
+    def receive_log_event(self, content_str, data_name):
         # TODO: authenticate log event
 
         # Create record.
-        new_record = self.create_record(content_str.decode())
+        new_record = self.create_record(content_str.decode(), data_name)
         # Encode for sending/storage.
         record_packet = new_record.wire_encode()
 
