@@ -12,6 +12,7 @@ from ndn.encoding import Name, FormalName
 sys.path.insert(0,'.')
 from ndn.svs import SVSync, SVSyncLogger, MissingData
 from record import Record, GenesisRecord
+import hashlib
 
 app = NDNApp()
 
