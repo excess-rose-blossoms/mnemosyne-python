@@ -88,8 +88,8 @@ class Logger:
             # TODO: sign the packet
 
             record_storage.store_record(
-                gen_rec.get_record_name_str(), gen_rec_packet)
-            self.last_names.append(gen_rec.get_record_name())
+                gen_rec.get_full_record_name_str(), gen_rec_packet)
+            self.last_names.append(gen_rec.get_full_record_name())
 
     # Given a log event, create and return an NDN record packet.
     def create_record(self, log_event, event_name):
@@ -107,6 +107,7 @@ class Logger:
             if (len(record.get_pointers_from_header())
                     >= self.num_record_links):
                 break
+        record.add_full_name()
         return record
 
     def log_events_missing_callback(self, missing_list: List[MissingData]) -> None:
@@ -139,8 +140,8 @@ class Logger:
         # TODO: Sign the data packet
 
         record_storage.store_record(
-            new_record.get_record_name_str(), record_packet)
-        self.last_record_name = new_record.get_record_name()
+            new_record.get_full_record_name_str(), record_packet)
+        self.last_record_name = new_record.get_full_record_name()
 
         print("publishing record:")
         new_record.print()
@@ -169,9 +170,9 @@ class Logger:
 
         # Save record
         record_storage.store_record(
-            received_record.get_record_name_str(), received_data)
+            received_record.get_full_record_name_str(), received_data)
 
-        self.last_names[self.last_name_tops] = received_record.get_record_name()
+        self.last_names[self.last_name_tops] = received_record.get_full_record_name()
         self.last_name_tops = (self.last_name_tops + 1) % len(self.last_names)
 
         # TODO: get event out of received record and verify it then add it to a set of seen events so users can see it
@@ -182,14 +183,14 @@ class Logger:
         for ptr in record.get_pointers_from_header():
             if (Name.to_str(ptr) in self.no_prev_records
                     or record_storage.get_record(Name.to_str(ptr)) is None):
-                self.waiting_referenced_records.append((Name.to_str(ptr), record.get_record_name_str()))
-                self.no_prev_records.add(record.get_record_name_str())
+                self.waiting_referenced_records.append((Name.to_str(ptr), record.get_full_record_name_str()))
+                self.no_prev_records.add(record.get_full_record_name_str())
 
         waiting_list: List[str] = []
         wrr_copy = self.waiting_referenced_records
         self.waiting_referenced_records = []
         for pair in wrr_copy:
-            if (pair[0] == record.get_record_name_str()):
+            if (pair[0] == record.get_full_record_name_str()):
                 waiting_list.append(pair[1])
                 self.no_prev_records.discard(pair[1])
             else:

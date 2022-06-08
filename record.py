@@ -1,5 +1,6 @@
 from typing import List
 from ndn.encoding import Component, Name, FormalName, NonStrictName, TlvModel, BytesField, RepeatedField
+import hashlib
 
 class RecordTypes:
     RECORD_NAME = 301
@@ -23,6 +24,7 @@ class Record:
         self.record_pointers: List[FormalName] = []
         self.log_event: str = None
         self.record_tlv: RecordTlv = None
+        self.full_record_name = None
         if (record_name is not None):
             # Create record with the name as provided.
             # Used for genesis records.
@@ -57,6 +59,13 @@ class Record:
     #     if (self.record_tlv is not None):
     #         return self.record_tlv.get_full_name()
     #     return []
+    def add_full_name(self):
+        if (self.record_tlv is not None):
+            raise RuntimeError('add_full_name tried to modify an already-built record.')
+        else:
+            record_hash = hashlib.sha256(Name.to_str(self.get_record_name()) + Name.to_str(self.record_pointers[0]) + Name.to_str(self.record_pointers[1]) +self.get_log_event()).encode()
+            self.full_record_name: FormalName = (
+                Name.normalize(Name.to_str(self.get_record_name) + record_hash))
 
     # Get the record's name.
     # e.g., /<producer-prefix>/RECORD/<event-name>
@@ -64,6 +73,10 @@ class Record:
         return self.record_name
     def get_record_name_str(self) -> str:
         return Name.to_str(self.record_name)
+    def get_full_record_name(self) -> FormalName:
+        return self.full_record_name
+    def get_full_record_name_str(self) -> str:
+        return Name.to_str(self.full_record_name)
 
     # Get the name of the underlying event.
     # i.e., the <event-name> in /<producer-prefix>/RECORD/<event-name>
