@@ -67,7 +67,7 @@ class Record:
             raise RuntimeError('add_full_name tried to modify an already-built record.')
         else:
             self.full_record_name: FormalName = (
-                Name.normalize(Name.to_str(self.get_record_name) + self.get_record_hash()))
+                Name.normalize(Name.to_str(self.get_record_name) + "/" +self.get_record_hash()))
 
     # Get the record's name.
     # e.g., /<producer-prefix>/RECORD/<event-name>
