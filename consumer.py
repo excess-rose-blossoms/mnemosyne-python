@@ -91,19 +91,23 @@ class Logger:
                 gen_rec.get_full_record_name_str(), gen_rec_packet)
             self.last_names.append(gen_rec.get_full_record_name())
 
+    def is_record_valid(self, record_name):
+        return True;
+
     # Given a log event, create and return an NDN record packet.
     def create_record(self, log_event, event_name):
         record = Record(producer_name=self.node_prefix,
                         log_event=log_event,
                         event_name=event_name)
-        if (self.last_record_name is not None):
+        if (self.last_record_name is not None and self.is_record_valid(self.last_record_name)):
             record.add_pointer(self.last_record_name)
         record_list = [
             rec_name for rec_name in self.last_names if (
                 Name.to_str(rec_name) not in self.no_prev_records)]
         random.shuffle(record_list)
         for tail_rec in record_list:
-            record.add_pointer(tail_rec)
+            if (self.is_record_valid(tail_rec)):
+                record.add_pointer(tail_rec)
             if (len(record.get_pointers_from_header())
                     >= self.num_record_links):
                 break
