@@ -60,14 +60,20 @@ class Record:
     #         return self.record_tlv.get_full_name()
     #     return []
     def get_record_hash(self):
-        return hashlib.sha256(Name.to_str(self.get_record_name()) + Name.to_str(self.record_pointers[0]) + Name.to_str(self.record_pointers[1]) +self.get_log_event().encode())
+        return hashlib.sha256((
+            Name.to_str(self.get_record_name())
+            + Name.to_str(self.record_pointers[0])
+            + Name.to_str(self.record_pointers[1])
+            + self.get_log_event()).encode()).hexdigest()
     
     def add_full_name(self):
         if (self.record_tlv is not None):
             raise RuntimeError('add_full_name tried to modify an already-built record.')
+        elif (self.is_genesis_record()):
+            self.full_record_name = self.record_name
         else:
             self.full_record_name: FormalName = (
-                Name.normalize(Name.to_str(self.get_record_name) + "/" +self.get_record_hash()))
+                Name.normalize(Name.to_str(self.get_record_name()) + "/" +self.get_record_hash()))
 
     # Get the record's name.
     # e.g., /<producer-prefix>/RECORD/<event-name>

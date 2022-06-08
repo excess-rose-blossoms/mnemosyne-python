@@ -84,6 +84,7 @@ class Logger:
         # Make genesis data
         for i in range(self.num_record_links):
             gen_rec = GenesisRecord(i)
+            gen_rec.add_full_name()
             gen_rec_packet = gen_rec.wire_encode()
             # TODO: sign the packet
 
