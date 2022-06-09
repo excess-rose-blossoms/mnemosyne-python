@@ -84,32 +84,31 @@ class Logger:
         # Make genesis data
         for i in range(self.num_record_links):
             gen_rec = GenesisRecord(i)
-            gen_rec.add_full_name()
             gen_rec_packet = gen_rec.wire_encode()
             # TODO: sign the packet
 
             record_storage.store_record(
-                gen_rec.get_full_record_name_str(), gen_rec_packet)
-            self.last_names.append(gen_rec.get_full_record_name())
+                gen_rec.get_record_name_str(), gen_rec_packet)
+            self.last_names.append(gen_rec.get_record_name())
 
-    def is_record_valid(self, record_name):
+    def is_record_valid(self, record_name, record_hash):
         return True
         # current_record:Record = record_storage.get_record(Name.to_str(record_name))
         # if (current_record == None): 
         #     return False
-        # if (current_record.is_genesis_record())
+        # if (current_record.is_genesis_record()):
         #     return True
         # else:
-        #     current_record_hash = record_name.split('/')[-1]
-        #     if (current_record_hash != current_record.get_record_hash()):
+        #     if (record_hash != current_record.get_record_hash()):
         #         return False
         #     else:
         #         isValid = True
         #         pointers = current_record.get_pointers_from_header()
+        #         pointer_hashes = current_record.get_pointer_hashes_from_header()
         #         if (len(pointers) > 0):
         #             isValid = True
-        #             for pointer in pointers:
-        #                 isValid = isValid and self.is_record_valid(pointer)
+        #             for count, pointer in pointers:
+        #                 isValid = isValid and self.is_record_valid(pointers[count], pointer_hashes[count])
         #             return isValid
         #         else:
         #             return False
@@ -120,18 +119,20 @@ class Logger:
                         log_event=log_event,
                         event_name=event_name)
         if (self.last_record_name is not None and self.is_record_valid(self.last_record_name)):
-            record.add_pointer(self.last_record_name)
+            prospective_link_record: Record = self.get_record(self.last_record_name)
+            if (self.is_record_valid(self.last_record_name, prospective_link_record.get_record_hash())):
+                record.add_pointer(self.last_record_name, prospective_link_record.get_record_hash())
         record_list = [
             rec_name for rec_name in self.last_names if (
                 Name.to_str(rec_name) not in self.no_prev_records)]
         random.shuffle(record_list)
         for tail_rec in record_list:
-            if (self.is_record_valid(tail_rec)):
-                record.add_pointer(tail_rec)
+            prospective_link_record: Record = self.get_record(tail_rec)
+            if (self.is_record_valid(tail_rec, prospective_link_record.get_record_hash())):
+                record.add_pointer(tail_rec, prospective_link_record.get_record_hash())
             if (len(record.get_pointers_from_header())
                     >= self.num_record_links):
                 break
-        record.add_full_name()
         return record
 
     def log_events_missing_callback(self, missing_list: List[MissingData]) -> None:
@@ -155,7 +156,6 @@ class Logger:
     # Creates, stores, and publishes a record.
     def receive_log_event(self, content_str, data_name):
         # TODO: authenticate log event
-
         # Create record.
         new_record = self.create_record(content_str.decode(), data_name)
         # Encode for sending/storage.
@@ -164,8 +164,8 @@ class Logger:
         # TODO: Sign the data packet
 
         record_storage.store_record(
-            new_record.get_full_record_name_str(), record_packet)
-        self.last_record_name = new_record.get_full_record_name()
+            new_record.get_record_name_str(), record_packet)
+        self.last_record_name = new_record.get_record_name()
 
         print("publishing record:")
         new_record.print()
@@ -194,9 +194,9 @@ class Logger:
 
         # Save record
         record_storage.store_record(
-            received_record.get_full_record_name_str(), received_data)
+            received_record.get_record_name_str(), received_data)
 
-        self.last_names[self.last_name_tops] = received_record.get_full_record_name()
+        self.last_names[self.last_name_tops] = received_record.get_record_name()
         self.last_name_tops = (self.last_name_tops + 1) % len(self.last_names)
 
         # TODO: get event out of received record and verify it then add it to a set of seen events so users can see it
@@ -207,14 +207,14 @@ class Logger:
         for ptr in record.get_pointers_from_header():
             if (Name.to_str(ptr) in self.no_prev_records
                     or record_storage.get_record(Name.to_str(ptr)) is None):
-                self.waiting_referenced_records.append((Name.to_str(ptr), record.get_full_record_name_str()))
-                self.no_prev_records.add(record.get_full_record_name_str())
+                self.waiting_referenced_records.append((Name.to_str(ptr), record.get_record_name_str()))
+                self.no_prev_records.add(record.get_record_name_str())
 
         waiting_list: List[str] = []
         wrr_copy = self.waiting_referenced_records
         self.waiting_referenced_records = []
         for pair in wrr_copy:
-            if (pair[0] == record.get_full_record_name_str()):
+            if (pair[0] == record.get_record_name_str()):
                 waiting_list.append(pair[1])
                 self.no_prev_records.discard(pair[1])
             else:

@@ -6,10 +6,12 @@ class RecordTypes:
     RECORD_NAME = 301
     RECORD_POINTER = 302
     LOG_EVENT = 303
+    RECORD_POINTER_HASH = 304
 
 class RecordTlv(TlvModel):
     record_name = BytesField(RecordTypes.RECORD_NAME)
     record_pointers = RepeatedField(BytesField(RecordTypes.RECORD_POINTER))
+    record_pointer_hashes = RepeatedField(BytesField(RecordTypes.RECORD_POINTER_HASH))
     log_event = BytesField(RecordTypes.LOG_EVENT)
 
 class Record:
@@ -22,9 +24,9 @@ class Record:
                  data: bytearray = None):
         self.record_name: FormalName = None
         self.record_pointers: List[FormalName] = []
+        self.record_pointer_hashes = []
         self.log_event: str = None
         self.record_tlv: RecordTlv = None
-        self.full_record_name = None
         if (record_name is not None):
             # Create record with the name as provided.
             # Used for genesis records.
@@ -44,6 +46,8 @@ class Record:
             self.record_name = Name.from_bytes(self.record_tlv.record_name)
             for ptr in self.record_tlv.record_pointers:
                 self.record_pointers.append(Name.from_bytes(ptr))
+            for ptr_hash in self.record_tlv.record_pointer_hashes:
+                self.record_pointer_hashes.append(Name.from_bytes(ptr_hash))
             self.log_event = self.record_tlv.log_event.tobytes().decode()
         else:
             raise RuntimeError('Invalid call to Record constructor')
@@ -63,17 +67,10 @@ class Record:
         return hashlib.sha256((
             Name.to_str(self.get_record_name())
             + Name.to_str(self.record_pointers[0])
+            + str(self.record_pointer_hashes[0])
             + Name.to_str(self.record_pointers[1])
+            + str(self.record_pointer_hashes[1])
             + self.get_log_event()).encode()).hexdigest()
-    
-    def add_full_name(self):
-        if (self.record_tlv is not None):
-            raise RuntimeError('add_full_name tried to modify an already-built record.')
-        elif (self.is_genesis_record()):
-            self.full_record_name = self.record_name
-        else:
-            self.full_record_name: FormalName = (
-                Name.normalize(Name.to_str(self.get_record_name()) + "/" +self.get_record_hash()))
 
     # Get the record's name.
     # e.g., /<producer-prefix>/RECORD/<event-name>
@@ -81,10 +78,6 @@ class Record:
         return self.record_name
     def get_record_name_str(self) -> str:
         return Name.to_str(self.record_name)
-    def get_full_record_name(self) -> FormalName:
-        return self.full_record_name
-    def get_full_record_name_str(self) -> str:
-        return Name.to_str(self.full_record_name)
 
     # Get the name of the underlying event.
     # i.e., the <event-name> in /<producer-prefix>/RECORD/<event-name>
@@ -108,11 +101,15 @@ class Record:
     def get_pointers_from_header(self) -> List[FormalName]:
         return self.record_pointers
 
+    def get_pointer_hashes_from_header(self) -> List:
+        return self.record_pointer_hashes
+
     # Add a pointer to another record.
-    def add_pointer(self, pointer: FormalName) -> None:
+    def add_pointer(self, record_pointer: FormalName, record_hash) -> None:
         if (self.record_tlv is not None):
             raise RuntimeError('add_pointer tried to modify an already-built record.')
-        self.record_pointers.append(pointer)
+        self.record_pointers.append(record_pointer)
+        self.record_pointer_hashes.append(record_hash)
 
     # Validate the pointers in the header.
     def check_pointer_count(self, num_pointers: int) -> None:
@@ -138,6 +135,8 @@ class Record:
         self.record_tlv.record_name = Name.to_bytes(self.record_name)
         for ptr in self.record_pointers:
             self.record_tlv.record_pointers.append(Name.to_bytes(ptr))
+        for ptr_hash in self.record_pointer_hashes:
+            self.record_tlv.record_pointer_hashes.append(Name.to_bytes(ptr_hash))
         self.record_tlv.log_event = self.log_event.encode()
         return self.record_tlv.encode()
 
@@ -153,7 +152,9 @@ class Record:
     def print(self) -> None:
         print("Record:\t" + Name.to_str(self.get_record_name()))
         print("Link1:\t" + Name.to_str(self.record_pointers[0]))
+        print("Link1-hash:\t" + self.record_pointer_hashes)
         print("Link2:\t" + Name.to_str(self.record_pointers[1]))
+        print("Link2-hash:\t" + self.record_pointer_hashes)
         print("Log event:\t" + self.get_log_event())
         print("Encoded:")
         if (self.record_tlv is not None):
