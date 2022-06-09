@@ -47,7 +47,7 @@ class Record:
             for ptr in self.record_tlv.record_pointers:
                 self.record_pointers.append(Name.from_bytes(ptr))
             for ptr_hash in self.record_tlv.record_pointer_hashes:
-                self.record_pointer_hashes.append(Name.from_bytes(ptr_hash))
+                self.record_pointer_hashes.append(ptr_hash.tobytes().decode())
             self.log_event = self.record_tlv.log_event.tobytes().decode()
         else:
             raise RuntimeError('Invalid call to Record constructor')
@@ -64,13 +64,18 @@ class Record:
     #         return self.record_tlv.get_full_name()
     #     return []
     def get_record_hash(self):
-        return hashlib.sha256((
-            Name.to_str(self.get_record_name())
-            + Name.to_str(self.record_pointers[0])
-            + str(self.record_pointer_hashes[0])
-            + Name.to_str(self.record_pointers[1])
-            + str(self.record_pointer_hashes[1])
-            + self.get_log_event()).encode()).hexdigest()
+        record_str = Name.to_str(self.get_record_name())
+        if (len(self.record_pointers) >= 1):
+            record_str += (
+                Name.to_str(self.record_pointers[0])
+                + self.record_pointer_hashes[0])
+        if (len(self.record_pointers) >= 2):
+            record_str += (
+                Name.to_str(self.record_pointers[1])
+                + self.record_pointer_hashes[1])
+        record_str += self.get_log_event()
+
+        return hashlib.sha256(record_str.encode()).hexdigest()
 
     # Get the record's name.
     # e.g., /<producer-prefix>/RECORD/<event-name>
@@ -136,7 +141,7 @@ class Record:
         for ptr in self.record_pointers:
             self.record_tlv.record_pointers.append(Name.to_bytes(ptr))
         for ptr_hash in self.record_pointer_hashes:
-            self.record_tlv.record_pointer_hashes.append(Name.to_bytes(ptr_hash))
+            self.record_tlv.record_pointer_hashes.append(ptr_hash.encode())
         self.record_tlv.log_event = self.log_event.encode()
         return self.record_tlv.encode()
 
@@ -152,9 +157,9 @@ class Record:
     def print(self) -> None:
         print("Record:\t" + Name.to_str(self.get_record_name()))
         print("Link1:\t" + Name.to_str(self.record_pointers[0]))
-        print("Link1-hash:\t" + self.record_pointer_hashes)
+        print("Link1-hash:\t" + self.record_pointer_hashes[0])
         print("Link2:\t" + Name.to_str(self.record_pointers[1]))
-        print("Link2-hash:\t" + self.record_pointer_hashes)
+        print("Link2-hash:\t" + self.record_pointer_hashes[1])
         print("Log event:\t" + self.get_log_event())
         print("Encoded:")
         if (self.record_tlv is not None):

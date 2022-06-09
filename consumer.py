@@ -118,8 +118,8 @@ class Logger:
         record = Record(producer_name=self.node_prefix,
                         log_event=log_event,
                         event_name=event_name)
-        if (self.last_record_name is not None and self.is_record_valid(self.last_record_name)):
-            prospective_link_record: Record = self.get_record(self.last_record_name)
+        if (self.last_record_name is not None):
+            prospective_link_record: Record = record_storage.get_record(Name.to_str(self.last_record_name))
             if (self.is_record_valid(self.last_record_name, prospective_link_record.get_record_hash())):
                 record.add_pointer(self.last_record_name, prospective_link_record.get_record_hash())
         record_list = [
@@ -127,7 +127,7 @@ class Logger:
                 Name.to_str(rec_name) not in self.no_prev_records)]
         random.shuffle(record_list)
         for tail_rec in record_list:
-            prospective_link_record: Record = self.get_record(tail_rec)
+            prospective_link_record: Record = record_storage.get_record(Name.to_str(tail_rec))
             if (self.is_record_valid(tail_rec, prospective_link_record.get_record_hash())):
                 record.add_pointer(tail_rec, prospective_link_record.get_record_hash())
             if (len(record.get_pointers_from_header())
