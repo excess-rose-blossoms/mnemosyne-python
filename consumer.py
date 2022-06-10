@@ -12,6 +12,7 @@ from ndn.encoding import Name, FormalName
 sys.path.insert(0,'.')
 from ndn.svs import SVSync, SVSyncLogger, MissingData
 from record import Record, GenesisRecord
+import hashlib
 
 app = NDNApp()
 
@@ -90,19 +91,44 @@ class Logger:
                 gen_rec.get_record_name_str(), gen_rec_packet)
             self.last_names.append(gen_rec.get_record_name())
 
+    def is_record_valid(self, record_name, record_hash):
+        current_record:Record = record_storage.get_record(Name.to_str(record_name))
+        if (current_record == None):
+            return False
+        if (current_record.is_genesis_record()):
+            return True
+        else:
+            if (record_hash != current_record.get_record_hash()):
+                return False
+            else:
+                isValid = True
+                pointers = current_record.get_pointers_from_header()
+                pointer_hashes = current_record.get_pointer_hashes_from_header()
+                if (len(pointers) > 0):
+                    isValid = True
+                    for i in range(len(pointers)):
+                        isValid = isValid and self.is_record_valid(pointers[i], pointer_hashes[i])
+                    return isValid
+                else:
+                    return False
+
     # Given a log event, create and return an NDN record packet.
     def create_record(self, log_event, event_name):
         record = Record(producer_name=self.node_prefix,
                         log_event=log_event,
                         event_name=event_name)
         if (self.last_record_name is not None):
-            record.add_pointer(self.last_record_name)
+            prospective_link_record: Record = record_storage.get_record(Name.to_str(self.last_record_name))
+            if (self.is_record_valid(self.last_record_name, prospective_link_record.get_record_hash())):
+                record.add_pointer(self.last_record_name, prospective_link_record.get_record_hash())
         record_list = [
             rec_name for rec_name in self.last_names if (
                 Name.to_str(rec_name) not in self.no_prev_records)]
         random.shuffle(record_list)
         for tail_rec in record_list:
-            record.add_pointer(tail_rec)
+            prospective_link_record: Record = record_storage.get_record(Name.to_str(tail_rec))
+            if (self.is_record_valid(tail_rec, prospective_link_record.get_record_hash())):
+                record.add_pointer(tail_rec, prospective_link_record.get_record_hash())
             if (len(record.get_pointers_from_header())
                     >= self.num_record_links):
                 break
@@ -129,7 +155,6 @@ class Logger:
     # Creates, stores, and publishes a record.
     def receive_log_event(self, content_str, data_name):
         # TODO: authenticate log event
-
         # Create record.
         new_record = self.create_record(content_str.decode(), data_name)
         # Encode for sending/storage.

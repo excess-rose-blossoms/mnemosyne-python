@@ -1,14 +1,17 @@
 from typing import List
 from ndn.encoding import Component, Name, FormalName, NonStrictName, TlvModel, BytesField, RepeatedField
+import hashlib
 
 class RecordTypes:
     RECORD_NAME = 301
     RECORD_POINTER = 302
     LOG_EVENT = 303
+    RECORD_POINTER_HASH = 304
 
 class RecordTlv(TlvModel):
     record_name = BytesField(RecordTypes.RECORD_NAME)
     record_pointers = RepeatedField(BytesField(RecordTypes.RECORD_POINTER))
+    record_pointer_hashes = RepeatedField(BytesField(RecordTypes.RECORD_POINTER_HASH))
     log_event = BytesField(RecordTypes.LOG_EVENT)
 
 class Record:
@@ -21,6 +24,7 @@ class Record:
                  data: bytearray = None):
         self.record_name: FormalName = None
         self.record_pointers: List[FormalName] = []
+        self.record_pointer_hashes = []
         self.log_event: str = None
         self.record_tlv: RecordTlv = None
         if (record_name is not None):
@@ -42,6 +46,8 @@ class Record:
             self.record_name = Name.from_bytes(self.record_tlv.record_name)
             for ptr in self.record_tlv.record_pointers:
                 self.record_pointers.append(Name.from_bytes(ptr))
+            for ptr_hash in self.record_tlv.record_pointer_hashes:
+                self.record_pointer_hashes.append(ptr_hash.tobytes().decode())
             self.log_event = self.record_tlv.log_event.tobytes().decode()
         else:
             raise RuntimeError('Invalid call to Record constructor')
@@ -57,6 +63,19 @@ class Record:
     #     if (self.record_tlv is not None):
     #         return self.record_tlv.get_full_name()
     #     return []
+    def get_record_hash(self):
+        record_str = Name.to_str(self.get_record_name())
+        if (len(self.record_pointers) >= 1):
+            record_str += (
+                Name.to_str(self.record_pointers[0])
+                + self.record_pointer_hashes[0])
+        if (len(self.record_pointers) >= 2):
+            record_str += (
+                Name.to_str(self.record_pointers[1])
+                + self.record_pointer_hashes[1])
+        record_str += self.get_log_event()
+
+        return hashlib.sha256(record_str.encode()).hexdigest()
 
     # Get the record's name.
     # e.g., /<producer-prefix>/RECORD/<event-name>
@@ -87,11 +106,15 @@ class Record:
     def get_pointers_from_header(self) -> List[FormalName]:
         return self.record_pointers
 
+    def get_pointer_hashes_from_header(self) -> List:
+        return self.record_pointer_hashes
+
     # Add a pointer to another record.
-    def add_pointer(self, pointer: FormalName) -> None:
+    def add_pointer(self, record_pointer: FormalName, record_hash) -> None:
         if (self.record_tlv is not None):
             raise RuntimeError('add_pointer tried to modify an already-built record.')
-        self.record_pointers.append(pointer)
+        self.record_pointers.append(record_pointer)
+        self.record_pointer_hashes.append(record_hash)
 
     # Validate the pointers in the header.
     def check_pointer_count(self, num_pointers: int) -> None:
@@ -117,6 +140,8 @@ class Record:
         self.record_tlv.record_name = Name.to_bytes(self.record_name)
         for ptr in self.record_pointers:
             self.record_tlv.record_pointers.append(Name.to_bytes(ptr))
+        for ptr_hash in self.record_pointer_hashes:
+            self.record_tlv.record_pointer_hashes.append(ptr_hash.encode())
         self.record_tlv.log_event = self.log_event.encode()
         return self.record_tlv.encode()
 
@@ -132,7 +157,9 @@ class Record:
     def print(self) -> None:
         print("Record:\t" + Name.to_str(self.get_record_name()))
         print("Link1:\t" + Name.to_str(self.record_pointers[0]))
+        print("Link1-hash:\t" + self.record_pointer_hashes[0])
         print("Link2:\t" + Name.to_str(self.record_pointers[1]))
+        print("Link2-hash:\t" + self.record_pointer_hashes[1])
         print("Log event:\t" + self.get_log_event())
         print("Encoded:")
         if (self.record_tlv is not None):
