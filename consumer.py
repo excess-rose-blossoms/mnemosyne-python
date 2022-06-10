@@ -1,5 +1,4 @@
 import asyncio as aio
-import dbm
 import logging
 import sys
 import random
@@ -12,7 +11,7 @@ from ndn.encoding import Name, FormalName
 sys.path.insert(0,'.')
 from ndn.svs import SVSync, SVSyncLogger, MissingData
 from record import Record, GenesisRecord
-import hashlib
+from record_storage import RecordStorage
 
 app = NDNApp()
 
@@ -32,30 +31,6 @@ def parse_cmd_args() -> dict:
     args["node_id"] = argvars.node_name
     args["verbose"] = argvars.verbose
     return args
-
-# Records are stored as {Name (str): encoded TLV packet}
-class RecordStorage:
-    # If another process is using the DB, wait for it to be done.
-    def get_db(self, db_name):
-        while True:
-            try:
-                db = dbm.open(db_name, 'c')
-                return db
-            except:
-                pass
-
-    def store_record(self, record_name: str, encoded_record: bytearray):
-        db = self.get_db('record_store')
-        db[record_name] = bytes(encoded_record)
-        db.close()
-
-    def get_record(self, record_name):
-        db = self.get_db('record_store')
-        ret = None
-        if record_name in db:
-            ret = Record(data=db[record_name])
-        db.close()
-        return ret
 
 record_storage = RecordStorage()
 
