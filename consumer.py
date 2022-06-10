@@ -92,26 +92,25 @@ class Logger:
             self.last_names.append(gen_rec.get_record_name())
 
     def is_record_valid(self, record_name, record_hash):
-        return True
-        # current_record:Record = record_storage.get_record(Name.to_str(record_name))
-        # if (current_record == None): 
-        #     return False
-        # if (current_record.is_genesis_record()):
-        #     return True
-        # else:
-        #     if (record_hash != current_record.get_record_hash()):
-        #         return False
-        #     else:
-        #         isValid = True
-        #         pointers = current_record.get_pointers_from_header()
-        #         pointer_hashes = current_record.get_pointer_hashes_from_header()
-        #         if (len(pointers) > 0):
-        #             isValid = True
-        #             for count, pointer in pointers:
-        #                 isValid = isValid and self.is_record_valid(pointers[count], pointer_hashes[count])
-        #             return isValid
-        #         else:
-        #             return False
+        current_record:Record = record_storage.get_record(Name.to_str(record_name))
+        if (current_record == None):
+            return False
+        if (current_record.is_genesis_record()):
+            return True
+        else:
+            if (record_hash != current_record.get_record_hash()):
+                return False
+            else:
+                isValid = True
+                pointers = current_record.get_pointers_from_header()
+                pointer_hashes = current_record.get_pointer_hashes_from_header()
+                if (len(pointers) > 0):
+                    isValid = True
+                    for i in range(len(pointers)):
+                        isValid = isValid and self.is_record_valid(pointers[i], pointer_hashes[i])
+                    return isValid
+                else:
+                    return False
 
     # Given a log event, create and return an NDN record packet.
     def create_record(self, log_event, event_name):
