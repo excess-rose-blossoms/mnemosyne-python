@@ -1,4 +1,10 @@
-SPEC
+Mnemosyne Python is a Python implementation of the Mnemosyne distributed logging framework for the Hydra distributed file framework. 
+Logging for distributed sys- tems introduces a few new challenges compared to single-server settings which the design of Mnemosyne takes into account.
+Distributing the logging among several loggers allows logging to continue even if some loggers fail. Mnemosyne loggers share updates with each other by publishing them using the NDN Sync protocol SVS, so that each can learn the whole logging history.
+To ensure that events are immutable once they are logged, Mnemosyne uses a directed acyclic graph (DAG) of linked log events. Each event is cryptographically linked to at least two prior ones, similar to a blockchain, so that any modifications will easily be exposed.
+
+The implementation consists of the following parts:
+
 --------
 PRODUCER
 --------
